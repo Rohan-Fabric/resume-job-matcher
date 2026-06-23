@@ -1,0 +1,152 @@
+@import "tailwindcss";
+
+/* ───────────────────────── Brand tokens (fabric-inspired, higher contrast) ───────────────────────── */
+:root {
+  --bg: #eef1f5;
+  --surface: #ffffff;
+  --ink: #060a12;
+  --ink-soft: #232b38;
+  --muted: #515b6b;
+  --line: #dde1e8;
+  --line-strong: #c2c8d2;
+
+  --brand: #0b998a;        /* teal */
+  --brand-ink: #077a6d;    /* teal hover */
+  --brand-wash: #e2f7f3;   /* teal tint */
+  --brand-glow: rgba(11, 153, 138, 0.18);
+
+  --amber: #a86f00;
+  --amber-wash: #fbefd6;
+  --rose: #a83641;
+  --rose-wash: #fbe7e9;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-brand: var(--brand);
+  --color-brand-ink: var(--brand-ink);
+  --color-brand-wash: var(--brand-wash);
+  --color-amber: var(--amber);
+  --color-amber-wash: var(--amber-wash);
+  --color-rose: var(--rose);
+  --color-rose-wash: var(--rose-wash);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+* {
+  border-color: var(--line);
+}
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* soft teal glow behind the hero */
+.hero-glow {
+  background:
+    radial-gradient(70% 55% at 50% -5%, var(--brand-glow) 0%, rgba(11, 153, 138, 0) 65%);
+}
+
+/* card lift so things don't look flat/faded */
+.card-lift {
+  box-shadow:
+    0 1px 2px rgba(6, 10, 18, 0.04),
+    0 12px 32px -16px rgba(6, 10, 18, 0.22);
+}
+
+/* ───────────────────────── Motion ───────────────────────── */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.fade-up { animation: fadeUp 0.55s cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+@keyframes shimmer {
+  0%   { background-position: -480px 0; }
+  100% { background-position: 480px 0; }
+}
+.skeleton {
+  background: linear-gradient(90deg, #e7eaef 25%, #f3f5f8 37%, #e7eaef 63%);
+  background-size: 480px 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+.spin { animation: spin 0.8s linear infinite; }
+
+/* conic-gradient ring used in the tailoring overlay */
+@keyframes spinSlow { to { transform: rotate(360deg); } }
+.ring-spinner {
+  border-radius: 9999px;
+  background: conic-gradient(from 0deg, var(--brand) 0%, var(--brand) 25%, transparent 55%, transparent 100%);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 6px), #000 calc(100% - 5px));
+          mask: radial-gradient(farthest-side, transparent calc(100% - 6px), #000 calc(100% - 5px));
+  animation: spinSlow 0.9s linear infinite;
+}
+
+/* aurora progress bar */
+@keyframes aurora {
+  0%   { background-position: 0% 50%; }
+  100% { background-position: 200% 50%; }
+}
+.aurora-bar {
+  background: linear-gradient(90deg, var(--brand) 0%, #38c9b9 35%, var(--brand-ink) 70%, var(--brand) 100%);
+  background-size: 200% 100%;
+  animation: aurora 1.8s linear infinite;
+}
+
+@keyframes breathe {
+  0%, 100% { transform: scale(0.92); opacity: 0.55; }
+  50%      { transform: scale(1.08); opacity: 1; }
+}
+.breathe { animation: breathe 2.4s ease-in-out infinite; }
+
+@keyframes textSwap {
+  0%, 100% { opacity: 0; transform: translateY(6px); }
+  12%, 88% { opacity: 1; transform: translateY(0); }
+}
+
+/* indeterminate progress — a segment that sweeps across, never "completes" */
+@keyframes indeterminate {
+  0%   { left: -45%; width: 45%; }
+  50%  { width: 55%; }
+  100% { left: 100%; width: 45%; }
+}
+.indet-track { position: relative; overflow: hidden; }
+.indet-bar {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  border-radius: 9999px;
+  background: linear-gradient(90deg, transparent, var(--brand), #3fd0c0, var(--brand-ink), transparent);
+  animation: indeterminate 1.4s cubic-bezier(0.65, 0.05, 0.36, 1) infinite;
+}
+
+/* orbiting dots around the emblem */
+@keyframes orbit { to { transform: rotate(360deg); } }
+.orbit { animation: orbit 3s linear infinite; }
+
+/* live status dot */
+@keyframes livePulse {
+  0%, 100% { box-shadow: 0 0 0 0 var(--brand-glow); }
+  50%      { box-shadow: 0 0 0 5px transparent; }
+}
+.live-dot { animation: livePulse 1.8s ease-in-out infinite; }
+
+/* gentle floating for the hero/loader emblem */
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-5px); }
+}
+.float { animation: float 3.5s ease-in-out infinite; }
