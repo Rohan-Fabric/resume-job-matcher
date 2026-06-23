@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<style>
+  @page { size: A4; margin: 40px 48px; }
+  * { box-sizing: border-box; }
+  body {
+    font-family: "DejaVu Sans", Helvetica, Arial, sans-serif;
+    color: #15202b;
+    font-size: 10.5px;
+    line-height: 1.45;
+    margin: 0;
+  }
+  .name { font-size: 22px; font-weight: 700; color: #0b1220; }
+  .contact { font-size: 9.5px; color: #5a6472; margin-top: 3px; }
+  .rule { height: 2px; background: #0b998a; margin: 10px 0 4px; border: 0; }
+
+  .section { margin-top: 14px; }
+  .section-title {
+    font-size: 11px; font-weight: 700; letter-spacing: 0.04em;
+    color: #0b998a; text-transform: uppercase;
+    border-bottom: 1px solid #e2e5ea; padding-bottom: 3px; margin-bottom: 6px;
+  }
+
+  .summary { color: #232b38; }
+
+  .entry { margin-bottom: 9px; }
+  .entry-head { display: flex; justify-content: space-between; gap: 12px; }
+  .entry-title { font-weight: 700; color: #15202b; }
+  .entry-sub { color: #3a4250; }
+  .entry-dates { color: #6b7480; font-size: 9.5px; white-space: nowrap; }
+
+  ul { margin: 4px 0 0; padding-left: 16px; }
+  li { margin-bottom: 2px; }
+  li::marker { color: #0b998a; }
+
+  .skills-line { margin-bottom: 3px; }
+  .skills-line b { color: #15202b; }
+
+  .awards li { margin-bottom: 3px; }
+</style>
+</head>
+<body>
+  {% if r.name %}<div class="name">{{ r.name }}</div>{% endif %}
+  {% if r.contact %}<div class="contact">{{ r.contact }}</div>{% endif %}
+  <hr class="rule" />
+
+  {% if r.summary %}
+  <div class="section">
+    <div class="section-title">Summary</div>
+    <div class="summary">{{ r.summary }}</div>
+  </div>
+  {% endif %}
+
+  {% if r.experience %}
+  <div class="section">
+    <div class="section-title">Experience</div>
+    {% for e in r.experience %}
+    <div class="entry">
+      <div class="entry-head">
+        <span><span class="entry-title">{{ e.role }}</span>{% if e.company %} <span class="entry-sub">— {{ e.company }}</span>{% endif %}</span>
+        <span class="entry-dates">{{ e.dates }}</span>
+      </div>
+      {% if e.bullets %}<ul>{% for b in e.bullets %}<li>{{ b }}</li>{% endfor %}</ul>{% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if r.projects %}
+  <div class="section">
+    <div class="section-title">Projects</div>
+    {% for p in r.projects %}
+    <div class="entry">
+      <div class="entry-head">
+        <span><span class="entry-title">{{ p.name }}</span>{% if p.tech %} <span class="entry-sub">— {{ p.tech }}</span>{% endif %}</span>
+        <span class="entry-dates">{{ p.dates }}</span>
+      </div>
+      {% if p.bullets %}<ul>{% for b in p.bullets %}<li>{{ b }}</li>{% endfor %}</ul>{% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if r.education %}
+  <div class="section">
+    <div class="section-title">Education</div>
+    {% for ed in r.education %}
+    <div class="entry">
+      <div class="entry-head">
+        <span><span class="entry-title">{{ ed.institution }}</span>{% if ed.detail %} <span class="entry-sub">— {{ ed.detail }}</span>{% endif %}</span>
+        <span class="entry-dates">{{ ed.dates }}</span>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if r.skills %}
+  <div class="section">
+    <div class="section-title">Technical Skills</div>
+    {% for s in r.skills %}<div class="skills-line">{{ s }}</div>{% endfor %}
+  </div>
+  {% endif %}
+
+  {% if r.awards %}
+  <div class="section">
+    <div class="section-title">Awards &amp; Achievements</div>
+    <ul class="awards">{% for a in r.awards %}<li>{{ a }}</li>{% endfor %}</ul>
+  </div>
+  {% endif %}
+</body>
+</html>

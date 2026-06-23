@@ -1,0 +1,23 @@
+# Secrets / env
+.env
+*.pem
+*credentials*.json
+
+# Python
+__pycache__/
+*.py[cod]
+*.sqlite3
+.venv/
+.pytest_cache/
+.ruff_cache/
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+npm-debug.log*
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
