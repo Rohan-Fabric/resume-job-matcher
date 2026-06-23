@@ -7,9 +7,10 @@ just by changing OPENROUTER_MODEL — no code change needed.
 from __future__ import annotations
 
 import json
+import time
 
 from django.conf import settings
-from openai import OpenAI
+from openai import OpenAI, RateLimitError
 
 
 def _client() -> OpenAI:
@@ -20,7 +21,11 @@ def _client() -> OpenAI:
 
 
 def _complete(prompt: str, max_tokens: int | None = None, model: str | None = None) -> str:
-    """One OpenRouter chat completion call. Returns the raw text reply."""
+    """One OpenRouter chat completion call. Returns the raw text reply.
+
+    Retries on rate-limit (429) with a short backoff — important now that scoring
+    fans out ~12 concurrent calls, which can briefly trip the free-tier limit.
+    """
     kwargs: dict = {
         "model": model or settings.OPENROUTER_MODEL,
         "extra_headers": {
@@ -31,8 +36,16 @@ def _complete(prompt: str, max_tokens: int | None = None, model: str | None = No
     }
     if max_tokens:
         kwargs["max_tokens"] = max_tokens
-    response = _client().chat.completions.create(**kwargs)
-    return response.choices[0].message.content or ""
+
+    for attempt in range(3):
+        try:
+            response = _client().chat.completions.create(**kwargs)
+            return response.choices[0].message.content or ""
+        except RateLimitError:
+            if attempt == 2:
+                raise
+            time.sleep(1.5 * (attempt + 1))  # 1.5s, then 3s
+    return ""
 
 
 def _parse_json(text: str) -> dict:

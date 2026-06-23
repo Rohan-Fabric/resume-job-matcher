@@ -8,6 +8,7 @@ Services decide WHAT to do; repositories do the DB writes; clients do the API ca
 from __future__ import annotations
 
 import json
+from concurrent.futures import ThreadPoolExecutor
 
 from .clients.jobs_client import JobsClient
 from .clients.llm_client import LLMClient
@@ -55,12 +56,19 @@ class ResumeMatchService:
         ]
         jobs = self.job_repo.bulk_create(rows)
 
-        # 3. score each job against the resume
-        for job in jobs:
-            verdict = self.llm.score(raw_text, job.jd_text)
-            self.job_repo.set_score(
-                job.pk, fit_score=verdict["score"], reasoning=verdict["reasoning"]
-            )
+        # 3. score each job against the resume — concurrently, since each scoring
+        #    call is independent. LLM calls fan out in threads; DB writes happen
+        #    back on the main thread (Django ORM connections don't cross threads).
+        def _score(job):
+            return job.pk, self.llm.score(raw_text, job.jd_text)
+
+        if jobs:
+            with ThreadPoolExecutor(max_workers=len(jobs)) as pool:
+                scored = list(pool.map(_score, jobs))
+            for pk, verdict in scored:
+                self.job_repo.set_score(
+                    pk, fit_score=verdict["score"], reasoning=verdict["reasoning"]
+                )
 
         return resume
 

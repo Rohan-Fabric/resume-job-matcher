@@ -11,6 +11,7 @@ across four tiers, biased toward the candidate's actual skills:
 from __future__ import annotations
 
 import re
+from concurrent.futures import ThreadPoolExecutor
 
 import requests
 from django.conf import settings
@@ -125,17 +126,29 @@ class JobsClient:
 
         url = lambda c: f"{settings.ADZUNA_BASE_URL}/{c}/search/1"  # noqa: E731
 
-        # Tier 1 — candidate's city, ONLY when we have a real city (not just
-        # the country name). Otherwise there's no city split and we skip straight
-        # to the region tier, so in-country jobs rank purely by score.
+        # Build every tier's Adzuna request up front, in priority order:
+        #   (url, params, country, fixed_tier)
+        # Tier 1 — candidate's city, ONLY when we have a real city (not just the
+        # country name). Otherwise skip straight to the region tier so in-country
+        # jobs rank purely by score.
+        tasks: list[tuple[str, dict, str, int | None]] = []
         if _is_real_city(location, home):
-            add(self._fetch(url(home), {**auth, **query, "where": location}), home, 1)
-        # Tier 2 — across the candidate's country (city dupes are skipped via `seen`)
-        add(self._fetch(url(home), {**auth, **query}), home, 2)
+            tasks.append((url(home), {**auth, **query, "where": location}, home, 1))
+        # Tier 2 — across the candidate's country
+        tasks.append((url(home), {**auth, **query}, home, 2))
         # Tier 3/4 — most relevant other markets for this home country
         markets = TIER3_MARKETS.get(home, DEFAULT_TIER3)
         for oc in [c for c in markets if c != home and c in ADZUNA_COUNTRIES][:2]:
-            add(self._fetch(url(oc), {**auth, **query}), oc, None)
+            tasks.append((url(oc), {**auth, **query}, oc, None))
+
+        # Fire all tier calls concurrently — they're independent HTTP requests.
+        # pool.map keeps results in task order, so dedup priority (city > country
+        # > abroad) is preserved when we feed them through `add` below.
+        with ThreadPoolExecutor(max_workers=len(tasks)) as pool:
+            results = list(pool.map(lambda t: self._fetch(t[0], t[1]), tasks))
+
+        for (_, _, country, fixed_tier), jobs in zip(tasks, results):
+            add(jobs, country, fixed_tier)
 
         collected.sort(key=lambda d: d["tier"])
         return collected[:MAX_TOTAL]
