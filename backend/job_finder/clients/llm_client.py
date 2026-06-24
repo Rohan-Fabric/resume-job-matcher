@@ -1,12 +1,13 @@
 """All LLM calls live here. Three jobs: extract a profile, score a job, tailor a resume.
 
-Uses OpenRouter via the OpenAI-compatible SDK (https://openrouter.ai/docs/quickstart),
-so the same client can target any model OpenRouter exposes (Gemini, Llama, etc.)
-just by changing OPENROUTER_MODEL — no code change needed.
+Uses OpenRouter via the OpenAI-compatible SDK (https://openrouter.ai/docs/quickstart).
+The model is set by OPENROUTER_MODEL (and OPENROUTER_MODEL_TAILOR for tailoring) —
+currently openai/gpt-oss-120b:free for all tasks.
 """
 from __future__ import annotations
 
 import json
+import re
 import time
 
 from django.conf import settings
@@ -58,6 +59,23 @@ def _str(v) -> str:
     return str(v).strip() if v else ""
 
 
+_ICON_PREFIX = re.compile(
+    r"^(envelopp?e|telephone|phone|globe|location|map[- ]?marker)[:\s]*",
+    re.IGNORECASE,
+)
+
+
+def _clean_contact(contact: str) -> str:
+    """Strip icon-label words the model sometimes prepends to a contact value.
+
+    Works per ' · ' segment and even when the word is glued to the value
+    (e.g. 'envelopperohan@x.com' → 'rohan@x.com'). Only matches at the START of
+    a segment, so it can never damage 'linkedin.com/...' or 'gmail.com'.
+    """
+    parts = [_ICON_PREFIX.sub("", p.strip()).strip() for p in contact.split("·")]
+    return " · ".join(p for p in parts if p)
+
+
 def _normalize_resume(raw: dict, fallback_text: str) -> dict:
     """Coerce the model's JSON into a safe, fully-typed shape for the template."""
     if not isinstance(raw, dict) or not raw:
@@ -103,7 +121,7 @@ def _normalize_resume(raw: dict, fallback_text: str) -> dict:
     ]
     return {
         "name": _str(raw.get("name")),
-        "contact": _str(raw.get("contact")),
+        "contact": _clean_contact(_str(raw.get("contact"))),
         "summary": _str(raw.get("summary")),
         "skills": [_str(s) for s in _list(raw.get("skills")) if _str(s)],
         "experience": experience,
@@ -175,7 +193,7 @@ this job needs.
 Return ONLY JSON in EXACTLY this shape (no markdown, no commentary):
 {{
   "name": "",
-  "contact": "phone · email · linkedin (one line)",
+  "contact": "raw values only, e.g. '+91-9852661989 · name@email.com · linkedin.com/in/x' — NO icon words like 'envelope'/'phone'/'mail', NO labels, just the values separated by ' · '",
   "summary": "2-3 sentence professional summary",
   "skills": ["Languages: ...", "Technologies: ...", "Core: ..."],
   "experience": [

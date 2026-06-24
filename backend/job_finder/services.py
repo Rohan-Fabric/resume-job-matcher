@@ -8,6 +8,7 @@ Services decide WHAT to do; repositories do the DB writes; clients do the API ca
 from __future__ import annotations
 
 import json
+import re
 from concurrent.futures import ThreadPoolExecutor
 
 from .clients.jobs_client import JobsClient
@@ -82,5 +83,12 @@ class ResumeMatchService:
             return None
         data = self.llm.tailor_resume(job.resume.raw_text, job.jd_text)
         self.tailored_repo.create(job_match=job, content=json.dumps(data))
-        slug = (job.company or "job").strip().replace(" ", "-") or "job"
-        return data, f"resume-{slug}-{job.id}.pdf"
+
+        def _slug(text: str, fallback: str) -> str:
+            s = re.sub(r"[^\w\s-]", "", (text or "").strip())  # drop punctuation
+            s = re.sub(r"\s+", "-", s)                          # spaces → hyphens
+            return s or fallback
+
+        name = _slug(data.get("name", ""), "candidate")
+        company = _slug(job.company, "job")
+        return data, f"{name}-{company}.pdf"

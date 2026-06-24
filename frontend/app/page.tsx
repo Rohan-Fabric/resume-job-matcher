@@ -49,10 +49,13 @@ export default function Home() {
       const blob = await tailorForJob(job.id);
       // let the overlay breathe so it never flashes
       await new Promise((r) => setTimeout(r, Math.max(0, 1600 - (Date.now() - started))));
+      const slug = (text: string, fallback: string) =>
+        (text || "").replace(/[^\w\s-]/g, "").trim().replace(/\s+/g, "-") || fallback;
+      const fileName = `${slug(resume?.profile?.name ?? "", "candidate")}-${slug(job.company, "job")}.pdf`;
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `resume-${job.company || "job"}-${job.id}.pdf`.replace(/\s+/g, "-");
+      a.download = fileName;
       document.body.appendChild(a); // must be in the DOM for .click() to fire reliably
       a.click();
       a.remove();
@@ -73,9 +76,9 @@ export default function Home() {
   }
 
   const matches = resume?.matches ?? [];
-  // location preference first (tier), then best fit within each tier
+  // best fit first, regardless of location (tier is just a label now)
   const sorted = [...matches].sort(
-    (a, b) => a.tier - b.tier || (b.fit_score ?? -1) - (a.fit_score ?? -1),
+    (a, b) => (b.fit_score ?? -1) - (a.fit_score ?? -1),
   );
 
   return (

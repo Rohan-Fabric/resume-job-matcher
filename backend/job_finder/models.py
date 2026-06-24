@@ -58,8 +58,8 @@ class JobMatch(models.Model):
     created_date = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        # location preference first (tier), then best fit within each tier
-        ordering = ["tier", "-fit_score"]
+        # best fit first, regardless of location (tier is shown only as a label)
+        ordering = ["-fit_score"]
 
     def __str__(self) -> str:
         return f"JobMatch<{self.title} @ {self.company}>"
