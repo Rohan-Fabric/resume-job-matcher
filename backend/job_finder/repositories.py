@@ -27,6 +27,9 @@ class JobMatchRepository:
     def for_resume(self, resume_id: int):
         return JobMatch.objects.filter(resume_id=resume_id)
 
+    def delete_for_resume(self, resume_id: int) -> None:
+        JobMatch.objects.filter(resume_id=resume_id).delete()
+
     def get(self, job_id: int) -> JobMatch | None:
         return JobMatch.objects.filter(pk=job_id).first()
 

@@ -12,8 +12,8 @@ class CandidateProfileOutputSerializer(serializers.ModelSerializer):
     class Meta:
         model = CandidateProfile
         fields = [
-            "name", "email", "phone", "location",
-            "country", "skills", "titles", "years_experience",
+            "name", "email", "phone", "location", "country",
+            "linkedin", "github", "skills", "titles", "years_experience",
         ]
 
 
@@ -21,8 +21,8 @@ class JobMatchOutputSerializer(serializers.ModelSerializer):
     class Meta:
         model = JobMatch
         fields = [
-            "id", "title", "company", "source_url",
-            "is_remote", "country", "tier", "fit_score", "reasoning",
+            "id", "title", "company", "source_url", "is_remote",
+            "location", "country", "tier", "fit_score", "reasoning",
         ]
 
 

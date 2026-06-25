@@ -72,3 +72,4 @@ OPENROUTER_MODEL_TAILOR = os.environ.get(
 ADZUNA_APP_ID = os.environ.get("ADZUNA_APP_ID", "")
 ADZUNA_APP_KEY = os.environ.get("ADZUNA_APP_KEY", "")
 ADZUNA_BASE_URL = os.environ.get("ADZUNA_BASE_URL", "https://api.adzuna.com/v1/api/jobs")
+JOOBLE_API_KEY = os.environ.get("JOOBLE_API_KEY", "")

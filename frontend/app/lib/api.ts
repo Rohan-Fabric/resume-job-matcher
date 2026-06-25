@@ -11,7 +11,43 @@ export async function uploadResume(file: File): Promise<Resume> {
     body: form,
   });
   if (!res.ok) {
-    throw new Error(`Upload failed (${res.status})`);
+    // surface the backend's reason (e.g. "not a resume") instead of a generic code
+    let msg = `Upload failed (${res.status})`;
+    try {
+      const body = await res.json();
+      if (body?.detail) msg = body.detail;
+    } catch {
+      /* non-JSON error body — keep the generic message */
+    }
+    throw new Error(msg);
+  }
+  return res.json();
+}
+
+export interface JobSearchOpts {
+  location?: string;
+  workType?: "remote" | "onsite" | "hybrid";
+  replace?: boolean;
+}
+
+/** Fetch + score jobs (deduped server-side). replace=true clears prior matches. */
+export async function loadMoreJobs(
+  resumeId: number,
+  page: number,
+  opts: JobSearchOpts = {},
+): Promise<Resume> {
+  const res = await fetch(`${BASE}/api/v1/resumes/${resumeId}/more/`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      page,
+      location: opts.location || undefined,
+      work_type: opts.workType,
+      replace: opts.replace,
+    }),
+  });
+  if (!res.ok) {
+    throw new Error(`Job search failed (${res.status})`);
   }
   return res.json();
 }

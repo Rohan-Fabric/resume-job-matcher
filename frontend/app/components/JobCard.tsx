@@ -15,19 +15,13 @@ function tierLabel(score: number | null) {
   return { text: "Low fit", color: "var(--rose)" };
 }
 
-/** Plain-English location label from the job's tier (1=city → 4=onsite abroad). */
+/** Show the job's actual city/area. Falls back to country only if the source
+ *  gave no location. Remote roles are flagged as such. */
 function locationLabel(job: JobMatch): string {
-  const c = job.country?.toUpperCase();
-  switch (job.tier) {
-    case 1:
-      return `In your city · ${c}`;
-    case 2:
-      return `In your region · ${c}`;
-    case 3:
-      return `Remote · ${c}`;
-    default:
-      return `Onsite · ${c}`;
+  if (job.is_remote) {
+    return job.location ? `Remote · ${job.location}` : "Remote";
   }
+  return job.location || job.country?.toUpperCase() || "—";
 }
 
 export function JobCard({ job, rank, tailoring, onTailor }: Props) {

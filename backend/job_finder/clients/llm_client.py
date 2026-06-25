@@ -50,13 +50,92 @@ def _complete(prompt: str, max_tokens: int | None = None, model: str | None = No
 
 
 def _parse_json(text: str) -> dict:
-    """Models sometimes wrap JSON in ```json fences — strip those before parsing."""
+    """Parse the model's JSON reply, tolerating ```json fences and surrounding
+    prose (e.g. 'Here is the resume: {…}. Hope it helps!'). Without this, a
+    chatty model drops us into the raw-text fallback and the resume loses all
+    its structure."""
     cleaned = text.strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip()
-    return json.loads(cleaned)
+    try:
+        return json.loads(cleaned)
+    except json.JSONDecodeError:
+        start, end = cleaned.find("{"), cleaned.rfind("}")
+        if start != -1 and end > start:
+            return json.loads(cleaned[start : end + 1])  # grab the outermost {…}
+        raise
 
 
 def _str(v) -> str:
     return str(v).strip() if v else ""
+
+
+def _str_list(v) -> list[str]:
+    """Coerce an LLM 'list' field to clean non-empty strings. Guards the later
+    ' '.join(skills) from a TypeError when the model returns numbers or dicts."""
+    if not isinstance(v, list):
+        return []
+    out = []
+    for x in v:
+        if x is None:
+            continue  # else str(None) → literal "None" leaks into skills
+        s = (x.get("name") or x.get("skill") or "") if isinstance(x, dict) else str(x)
+        s = s.strip()
+        if s:
+            out.append(s)
+    return out
+
+
+def _num(v):
+    """First number in v as float, else None ('5 years' → 5.0, '5+' → 5.0)."""
+    m = re.search(r"\d+(?:\.\d+)?", str(v))
+    return float(m.group()) if m else None
+
+
+def _clamp_score(v) -> float:
+    """LLM score → float in [0,10]. Handles 8, '8', '8/10', '8 out of 10',
+    negatives, and junk (-?\\d so '-5' clamps to 0, not 5)."""
+    m = re.search(r"-?\d+(?:\.\d+)?", str(v))
+    n = float(m.group()) if m else 0.0
+    return max(0.0, min(10.0, n))
+
+
+# LinkedIn/GitHub have a fixed URL shape — regex them straight from the resume
+# text instead of asking the LLM (no hallucinated handles, no prompt change).
+_LINKEDIN_RE = re.compile(r"(?:https?://)?(?:www\.)?linkedin\.com/in/[\w%-]+", re.I)
+_GITHUB_RE = re.compile(r"(?:https?://)?(?:www\.)?github\.com/[\w-]+", re.I)
+
+
+def _find_url(pattern: re.Pattern, text: str) -> str:
+    """First URL matching `pattern`, normalized to https://. '' if none."""
+    m = pattern.search(text)
+    if not m:
+        return ""
+    url = m.group(0)
+    return url if url.lower().startswith("http") else f"https://{url}"
+
+
+_EMAIL_RE = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+")
+
+
+def _clean_email(value: str) -> str:
+    """Models glue icon words onto the email (e.g. 'envelopemdrohan@x.com').
+    An email has a fixed shape — pull it out instead of guessing every prefix."""
+    m = _EMAIL_RE.search(value)
+    return m.group(0) if m else value
+
+
+_MAILTO_RE = re.compile(r"mailto:([\w.+-]+@[\w-]+\.[\w.-]+)", re.I)
+
+
+def _find_email(text: str) -> str:
+    """The candidate's email, cleanly. A 'mailto:' link (from the PDF's link
+    annotation) is the trustworthy source — visible text can have icon-glyph
+    junk glued on (e.g. 'perohan@…') that a bare email regex can't strip. Fall
+    back to the first plain email match only if there's no mailto link."""
+    m = _MAILTO_RE.search(text)
+    if m:
+        return m.group(1)
+    m = _EMAIL_RE.search(text)
+    return m.group(0) if m else ""
 
 
 _ICON_PREFIX = re.compile(
@@ -90,34 +169,45 @@ def _normalize_resume(raw: dict, fallback_text: str) -> dict:
     def _bullets(e):
         return [_str(b) for b in _list(e.get("bullets")) if _str(b)]
 
+    # build then drop entries with no real content, so an empty section never
+    # renders a blank header (a fresher may legitimately have no experience).
     experience = [
-        {
-            "role": _str(e.get("role")),
-            "company": _str(e.get("company")),
-            "dates": _str(e.get("dates")),
-            "bullets": _bullets(e),
-        }
-        for e in _list(raw.get("experience"))
-        if isinstance(e, dict)
+        e for e in (
+            {
+                "role": _str(x.get("role")),
+                "company": _str(x.get("company")),
+                "dates": _str(x.get("dates")),
+                "bullets": _bullets(x),
+            }
+            for x in _list(raw.get("experience"))
+            if isinstance(x, dict)
+        )
+        if e["role"] or e["company"] or e["bullets"]
     ]
     projects = [
-        {
-            "name": _str(p.get("name")),
-            "tech": _str(p.get("tech")),
-            "dates": _str(p.get("dates")),
-            "bullets": _bullets(p),
-        }
-        for p in _list(raw.get("projects"))
-        if isinstance(p, dict)
+        p for p in (
+            {
+                "name": _str(x.get("name")),
+                "tech": _str(x.get("tech")),
+                "dates": _str(x.get("dates")),
+                "bullets": _bullets(x),
+            }
+            for x in _list(raw.get("projects"))
+            if isinstance(x, dict)
+        )
+        if p["name"] or p["bullets"]
     ]
     education = [
-        {
-            "institution": _str(ed.get("institution")),
-            "detail": _str(ed.get("detail")),
-            "dates": _str(ed.get("dates")),
-        }
-        for ed in _list(raw.get("education"))
-        if isinstance(ed, dict)
+        ed for ed in (
+            {
+                "institution": _str(x.get("institution")),
+                "detail": _str(x.get("detail")),
+                "dates": _str(x.get("dates")),
+            }
+            for x in _list(raw.get("education"))
+            if isinstance(x, dict)
+        )
+        if ed["institution"] or ed["detail"]
     ]
     return {
         "name": _str(raw.get("name")),
@@ -156,16 +246,17 @@ Respond ONLY with JSON, no other text:
             raw = {}
 
         # Normalize to exactly the model's fields so create(**profile) is safe.
-        years = raw.get("years_experience")
         return {
             "name": str(raw.get("name") or ""),
-            "email": str(raw.get("email") or ""),
-            "phone": str(raw.get("phone") or ""),
-            "location": str(raw.get("location") or ""),
+            "email": _find_email(resume_text) or _clean_email(str(raw.get("email") or "")),
+            "phone": _ICON_PREFIX.sub("", str(raw.get("phone") or "")).strip(),
+            "location": _ICON_PREFIX.sub("", str(raw.get("location") or "")).strip(),
             "country": str(raw.get("country") or "").lower()[:8],
-            "skills": raw.get("skills") if isinstance(raw.get("skills"), list) else [],
-            "titles": raw.get("titles") if isinstance(raw.get("titles"), list) else [],
-            "years_experience": years if isinstance(years, (int, float)) else None,
+            "linkedin": _find_url(_LINKEDIN_RE, resume_text),
+            "github": _find_url(_GITHUB_RE, resume_text),
+            "skills": _str_list(raw.get("skills")),
+            "titles": _str_list(raw.get("titles")),
+            "years_experience": _num(raw.get("years_experience")),
         }
 
     def score(self, resume_text: str, jd_text: str) -> dict:
@@ -180,24 +271,51 @@ Score this candidate's fit from 0-10 and give a 2-sentence reason.
 Respond ONLY with JSON, no other text:
 {{"score": 0, "reasoning": ""}}"""
         try:
-            return _parse_json(_complete(prompt))
+            raw = _parse_json(_complete(prompt))
         except (json.JSONDecodeError, Exception):
-            return {"score": 0.0, "reasoning": ""}
+            raw = {}
+        # always return a safe, fully-typed shape — a bad reply must never crash
+        # the scoring loop (KeyError) or the DB write (string into a FloatField).
+        return {"score": _clamp_score(raw.get("score")), "reasoning": _str(raw.get("reasoning"))}
 
     def tailor_resume(self, resume_text: str, jd_text: str) -> dict:
         """resume + JD → STRUCTURED resume tailored to the job (our template renders it)."""
-        prompt = f"""Tailor this resume to the job description below. Keep every real fact
-accurate — do NOT invent, drop, or merge details. Reword and reorder to emphasise what
-this job needs.
+        prompt = f"""You are a senior resume writer and ATS (Applicant Tracking System) expert
+with 10+ years getting resumes past automated screeners and in front of recruiters. Rewrite
+the candidate's resume so it is tailored to the job description and maximally ATS-friendly.
 
-Return ONLY JSON in EXACTLY this shape (no markdown, no commentary):
+ACCURACY — non-negotiable:
+- Use ONLY facts present in the original resume. NEVER invent, exaggerate, or add skills,
+  employers, titles, dates, or metrics the candidate does not actually have.
+- You may reword, reorder, and re-emphasise. You may NOT fabricate.
+
+ATS OPTIMISATION:
+- Mirror the EXACT keywords, tool names, and skill phrasing from the job description wherever
+  the candidate genuinely has that experience — ATS software matches on exact terms.
+- Put the most JD-relevant experience, projects, and skills FIRST.
+- Start every experience/project bullet with a strong action verb (Built, Led, Designed,
+  Optimised, Shipped, Automated) and quantify impact whenever a number exists in the source.
+- Group skills under clear categories the JD uses (Languages, Frameworks, Tools, Core).
+- Plain text only — no tables, columns, emojis, or symbols an ATS parser can choke on.
+
+SOURCE may be prose/paragraphs, not a formatted resume. Either way, extract the real roles,
+projects, education, and achievements into the structured fields — never dump into "summary".
+
+OUTPUT — strict, obey exactly:
+- Return ONE valid JSON object and NOTHING else: no markdown, no code fences, no comments,
+  no text before or after the JSON.
+- Use EXACTLY these keys and value types. Omit an item entirely rather than returning an
+  empty or placeholder one. Every bullet must be a real, specific sentence.
+- "contact": raw values only, separated by ' · ' (e.g. '+91-9852661989 · name@email.com ·
+  linkedin.com/in/x') — NO icon words ('envelope'/'phone'/'mail'), NO labels.
+
 {{
   "name": "",
-  "contact": "raw values only, e.g. '+91-9852661989 · name@email.com · linkedin.com/in/x' — NO icon words like 'envelope'/'phone'/'mail', NO labels, just the values separated by ' · '",
-  "summary": "2-3 sentence professional summary",
-  "skills": ["Languages: ...", "Technologies: ...", "Core: ..."],
+  "contact": "",
+  "summary": "2-3 sentences targeting THIS role, front-loaded with JD keywords the candidate truly matches",
+  "skills": ["Languages: ...", "Frameworks: ...", "Tools: ...", "Core: ..."],
   "experience": [
-    {{"role": "", "company": "", "dates": "", "bullets": ["", ""]}}
+    {{"role": "", "company": "", "dates": "", "bullets": ["action verb + what + quantified impact"]}}
   ],
   "projects": [
     {{"name": "", "tech": "", "dates": "", "bullets": [""]}}
@@ -205,7 +323,7 @@ Return ONLY JSON in EXACTLY this shape (no markdown, no commentary):
   "education": [
     {{"institution": "", "detail": "", "dates": ""}}
   ],
-  "awards": ["", ""]
+  "awards": [""]
 }}
 
 Job description:

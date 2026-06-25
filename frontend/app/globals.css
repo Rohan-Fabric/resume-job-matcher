@@ -10,10 +10,10 @@
   --line: #dde1e8;
   --line-strong: #c2c8d2;
 
-  --brand: #0b998a;        /* teal */
-  --brand-ink: #077a6d;    /* teal hover */
-  --brand-wash: #e2f7f3;   /* teal tint */
-  --brand-glow: rgba(11, 153, 138, 0.18);
+  --brand: #5c2dba;        /* fabric violet */
+  --brand-ink: #4a2299;    /* violet hover */
+  --brand-wash: #f0eaf8;   /* lavender tint */
+  --brand-glow: rgba(92, 45, 186, 0.18);
 
   --amber: #a86f00;
   --amber-wash: #fbefd6;
@@ -36,8 +36,9 @@
   --color-amber-wash: var(--amber-wash);
   --color-rose: var(--rose);
   --color-rose-wash: var(--rose-wash);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-instrument-sans);
+  --font-serif: var(--font-instrument-serif);
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
 * {
@@ -47,15 +48,22 @@
 body {
   background: var(--bg);
   color: var(--ink);
-  font-family: var(--font-geist-sans), system-ui, sans-serif;
+  font-family: var(--font-instrument-sans), system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
 
-/* soft teal glow behind the hero */
+/* Fabric display headlines — Instrument Serif */
+.font-display {
+  font-family: var(--font-instrument-serif), Georgia, serif;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+}
+
+/* soft violet glow behind the hero */
 .hero-glow {
   background:
-    radial-gradient(70% 55% at 50% -5%, var(--brand-glow) 0%, rgba(11, 153, 138, 0) 65%);
+    radial-gradient(70% 55% at 50% -5%, var(--brand-glow) 0%, rgba(92, 45, 186, 0) 65%);
 }
 
 /* card lift so things don't look flat/faded */
@@ -101,7 +109,7 @@ body {
   100% { background-position: 200% 50%; }
 }
 .aurora-bar {
-  background: linear-gradient(90deg, var(--brand) 0%, #38c9b9 35%, var(--brand-ink) 70%, var(--brand) 100%);
+  background: linear-gradient(90deg, var(--brand) 0%, #a566f2 35%, var(--brand-ink) 70%, var(--brand) 100%);
   background-size: 200% 100%;
   animation: aurora 1.8s linear infinite;
 }
@@ -129,7 +137,7 @@ body {
   top: 0;
   height: 100%;
   border-radius: 9999px;
-  background: linear-gradient(90deg, transparent, var(--brand), #3fd0c0, var(--brand-ink), transparent);
+  background: linear-gradient(90deg, transparent, var(--brand), #a566f2, var(--brand-ink), transparent);
   animation: indeterminate 1.4s cubic-bezier(0.65, 0.05, 0.36, 1) infinite;
 }
 

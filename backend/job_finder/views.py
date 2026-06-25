@@ -15,6 +15,8 @@ from .serializers import (
 )
 from .services import ResumeMatchService
 
+MIN_RESUME_CHARS = 200  # less than this = empty/scanned/not a real resume
+
 
 class ResumeViewSet(ViewSet):
     """POST /api/v1/resumes/            → upload, extract, find + score jobs
@@ -27,18 +29,57 @@ class ResumeViewSet(ViewSet):
         upload = serializer.validated_data["file"]
 
         raw_text = extract_text(upload)
+        # Reject empty/scanned/non-resume PDFs before spending an LLM call.
+        if len(raw_text.strip()) < MIN_RESUME_CHARS:
+            return Response(
+                {"detail": "We couldn't read enough text from this PDF. Upload a "
+                           "text-based resume — scanned or image-only PDFs aren't "
+                           "supported."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         saved_path = default_storage.save(f"resumes/{upload.name}", upload)
         file_url = default_storage.url(saved_path)
 
-        resume = ResumeMatchService().process_resume(
-            file_url=file_url, raw_text=raw_text
-        )
+        try:
+            resume = ResumeMatchService().process_resume(
+                file_url=file_url, raw_text=raw_text
+            )
+        except ValueError:
+            return Response(
+                {"detail": "This doesn't look like a resume — we couldn't find a "
+                           "name, skills, or job titles in it."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         return Response(
             ResumeOutputSerializer(resume).data, status=status.HTTP_201_CREATED
         )
 
     def retrieve(self, request, pk=None):
         resume = ResumeRepository().get(int(pk))
+        if resume is None:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        return Response(ResumeOutputSerializer(resume).data)
+
+    @action(detail=True, methods=["post"])
+    def more(self, request, pk=None):
+        """POST /api/v1/resumes/{id}/more/ → fetch + score jobs (deduped).
+
+        Body (all optional): {"page": 2, "location": "Bhopal",
+        "work_type": "remote|onsite|hybrid", "replace": true}.
+        replace=true clears prior matches (fresh search); else appends.
+        """
+        page = int(request.data.get("page") or 2)
+        location = request.data.get("location") or None
+        work_type = request.data.get("work_type") or "hybrid"
+        replace = bool(request.data.get("replace"))
+        resume = ResumeMatchService().find_more_jobs(
+            resume_id=int(pk),
+            page=page,
+            location=location,
+            work_type=work_type,
+            replace=replace,
+        )
         if resume is None:
             return Response(status=status.HTTP_404_NOT_FOUND)
         return Response(ResumeOutputSerializer(resume).data)

@@ -4,6 +4,8 @@ export interface CandidateProfile {
   phone: string;
   location: string;
   country: string;
+  linkedin: string;
+  github: string;
   skills: string[];
   titles: string[];
   years_experience: number | null;
@@ -15,6 +17,7 @@ export interface JobMatch {
   company: string;
   source_url: string;
   is_remote: boolean;
+  location: string;
   country: string;
   tier: number;
   fit_score: number | null;

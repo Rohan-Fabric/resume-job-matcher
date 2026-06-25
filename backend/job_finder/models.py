@@ -31,6 +31,8 @@ class CandidateProfile(models.Model):
     phone = models.CharField(max_length=32, blank=True)
     location = models.CharField(max_length=255, blank=True)
     country = models.CharField(max_length=8, blank=True)  # ISO alpha-2, e.g. "in"
+    linkedin = models.URLField(blank=True)
+    github = models.URLField(blank=True)
     skills = models.JSONField(default=list)   # ["Python", "Django"]
     titles = models.JSONField(default=list)   # ["Backend Engineer"]
     years_experience = models.FloatField(null=True, blank=True)
@@ -50,6 +52,7 @@ class JobMatch(models.Model):
     jd_text = models.TextField(blank=True)
     source_url = models.URLField(blank=True)
     is_remote = models.BooleanField(default=False)
+    location = models.CharField(max_length=255, blank=True)  # job's city/area, as posted
     country = models.CharField(max_length=8, blank=True)  # job's country, ISO alpha-2
     # 1 = candidate's city, 2 = candidate's country, 3 = remote abroad, 4 = onsite abroad
     tier = models.IntegerField(default=4)

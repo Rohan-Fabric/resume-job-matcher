@@ -23,6 +23,7 @@ services:
       - ADZUNA_APP_ID=${ADZUNA_APP_ID}
       - ADZUNA_APP_KEY=${ADZUNA_APP_KEY}
       - ADZUNA_BASE_URL=${ADZUNA_BASE_URL}
+      - JOOBLE_API_KEY=${JOOBLE_API_KEY}
     depends_on:
       postgres:
         condition: service_healthy

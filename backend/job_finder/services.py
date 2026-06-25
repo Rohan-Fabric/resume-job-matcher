@@ -32,11 +32,16 @@ class ResumeMatchService:
         self.jobs = JobsClient()
 
     def process_resume(self, *, file_url: str, raw_text: str):
-        """Upload flow: persist resume, extract profile, find + score jobs."""
-        resume = self.resume_repo.create(file_url=file_url, raw_text=raw_text)
+        """Upload flow: persist resume, extract profile, find + score jobs.
 
-        # 1. LLM extracts structured details
+        Raises ValueError if the text yields no usable profile (not a resume)."""
+        # 1. LLM extracts structured details — do this BEFORE persisting, so a
+        #    non-resume doesn't leave an orphan row behind.
         profile_data = self.llm.extract_profile(raw_text)
+        if not (profile_data["name"] or profile_data["skills"] or profile_data["titles"]):
+            raise ValueError("not_a_resume")
+
+        resume = self.resume_repo.create(file_url=file_url, raw_text=raw_text)
         self.profile_repo.create(resume=resume, **profile_data)
         self.resume_repo.mark_parsed(resume.pk)
 
@@ -50,6 +55,7 @@ class ResumeMatchService:
                 jd_text=j.get("jd_text", ""),
                 source_url=j.get("source_url", ""),
                 is_remote=j.get("is_remote", False),
+                location=j.get("location", ""),
                 country=j.get("country", ""),
                 tier=j.get("tier", 4),
             )
@@ -64,6 +70,91 @@ class ResumeMatchService:
             return job.pk, self.llm.score(raw_text, job.jd_text)
 
         if jobs:
+            with ThreadPoolExecutor(max_workers=len(jobs)) as pool:
+                scored = list(pool.map(_score, jobs))
+            for pk, verdict in scored:
+                self.job_repo.set_score(
+                    pk, fit_score=verdict["score"], reasoning=verdict["reasoning"]
+                )
+
+        return resume
+
+    def find_more_jobs(
+        self,
+        *,
+        resume_id: int,
+        page: int = 2,
+        location: str | None = None,
+        work_type: str = "hybrid",
+        replace: bool = False,
+    ):
+        """Fetch jobs for an existing resume with a work-type preference.
+
+        work_type: "remote" (anywhere, city ignored), "onsite" (city only),
+        or "hybrid" (both). replace=True clears prior matches first (a fresh
+        search); replace=False appends, skipping any we already have."""
+        resume = self.resume_repo.get(resume_id)
+        if resume is None or not hasattr(resume, "profile"):
+            return None
+
+        if replace:
+            self.job_repo.delete_for_resume(resume_id)
+
+        p = resume.profile
+        city = "" if work_type == "remote" else (location or p.location)
+        profile = {
+            "titles": p.titles,
+            "skills": p.skills,
+            "location": city,
+            "country": p.country,
+        }
+        found = self.jobs.search(profile, page=page, remote=(work_type == "remote"))
+
+        # work-type + location-scope filter. onsite/hybrid stay in the candidate's
+        # country (so a Bangalore search never surfaces US onsite roles); remote
+        # is anywhere.
+        home = (p.country or "in").lower()
+        if work_type == "remote":
+            found = [j for j in found if j["is_remote"]]
+        elif work_type == "onsite":
+            found = [
+                j for j in found
+                if not j["is_remote"] and (j.get("country") or "").lower() == home
+            ]
+        else:  # hybrid: in-country onsite + remote anywhere
+            found = [
+                j for j in found
+                if j["is_remote"] or (j.get("country") or "").lower() == home
+            ]
+
+        # dedup against jobs already saved for this resume
+        seen = {
+            j.source_url
+            for j in self.job_repo.for_resume(resume_id)
+            if j.source_url
+        }
+        fresh = [j for j in found if j["source_url"] and j["source_url"] not in seen]
+
+        rows = [
+            JobMatch(
+                resume=resume,
+                title=j["title"],
+                company=j.get("company", ""),
+                jd_text=j.get("jd_text", ""),
+                source_url=j.get("source_url", ""),
+                is_remote=j.get("is_remote", False),
+                location=j.get("location", ""),
+                country=j.get("country", ""),
+                tier=j.get("tier", 4),
+            )
+            for j in fresh
+        ]
+        jobs = self.job_repo.bulk_create(rows)
+
+        if jobs:
+            def _score(job):
+                return job.pk, self.llm.score(resume.raw_text, job.jd_text)
+
             with ThreadPoolExecutor(max_workers=len(jobs)) as pool:
                 scored = list(pool.map(_score, jobs))
             for pk, verdict in scored:
