@@ -280,7 +280,9 @@ export default function Home() {
           <>
             <div className="mx-auto flex max-w-3xl flex-col items-center text-center">
               <h1 className="hero-headline">
-                Agentic AI for <em>your job search</em>
+                Agentic AI for
+                <br />
+                <em>your job search</em>
               </h1>
 
               <p className="mt-5 max-w-xl text-[1.05rem] leading-relaxed text-muted">

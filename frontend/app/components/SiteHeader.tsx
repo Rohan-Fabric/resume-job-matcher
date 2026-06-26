@@ -2,7 +2,7 @@ export function SiteHeader() {
   return (
     <header className="absolute inset-x-0 top-0 z-30">
       <div className="mx-auto flex h-16 max-w-6xl items-center px-6">
-        <a href="/" className="group flex items-center gap-2.5">
+        <a href="/" className="group flex items-center gap-3">
           {/* official fabric logo (icon + wordmark) */}
           <svg
             width="133"
@@ -10,7 +10,7 @@ export function SiteHeader() {
             viewBox="0 0 133 46"
             fill="none"
             xmlns="http://www.w3.org/2000/svg"
-            className="h-9 w-auto transition-transform group-hover:scale-105"
+            className="h-7 w-auto transition-transform group-hover:scale-105"
             aria-label="fabric"
           >
             <path
@@ -37,7 +37,8 @@ export function SiteHeader() {
               </linearGradient>
             </defs>
           </svg>
-          <span className="text-2xl font-semibold leading-none tracking-tight text-[#222222]">
+          <span className="h-5 w-px bg-line-strong" aria-hidden />
+          <span className="text-lg font-medium leading-none tracking-tight text-[#222222]">
             JobMatch
           </span>
         </a>

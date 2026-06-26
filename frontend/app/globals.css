@@ -71,24 +71,20 @@ button:disabled {
   letter-spacing: -0.01em;
 }
 
-/* Hero headline — bold high-contrast serif, italic violet accent block
-   (Playfair Display, like the fabric reference) */
+/* Hero headline — Instrument Serif, thin, with an inline italic violet accent */
 .hero-headline {
-  font-family: var(--font-playfair), "Playfair Display", Georgia, serif;
-  font-size: clamp(2.5rem, 6vw, 4.25rem);
-  font-weight: 700;
-  line-height: 1.08;
-  letter-spacing: -0.02em;
-  color: #1a1a1a;
-  text-align: center;
-  max-width: 900px;
-  margin: 0 auto;
+  font-family: var(--font-instrument-serif), Georgia, serif;
+  font-size: clamp(2.75rem, 5.5vw, 5rem);
+  font-weight: 400;
+  line-height: 1.1;
+  letter-spacing: -1.5px;
+  color: #111;
+  max-width: 920px;
+  margin: 0 auto 1.25rem;
 }
 .hero-headline em {
-  display: block;
   font-style: italic;
-  font-weight: 700;
-  color: var(--brand);
+  color: #7c40de;
 }
 
 /* soft violet glow behind the hero */
