@@ -80,6 +80,22 @@ class ResumeViewSet(ViewSet):
             return Response(status=status.HTTP_404_NOT_FOUND)
         return Response(ResumeOutputSerializer(resume).data)
 
+    @action(detail=True, methods=["post"])
+    def score(self, request, pk=None):
+        """POST /api/v1/resumes/{id}/score/ → score the next batch of unscored
+        jobs so the client can fill cards in live. Returns the resume plus
+        {remaining, done}; call repeatedly until done is true."""
+        batch = int(request.data.get("batch") or 8)
+        result = ResumeMatchService().score_pending(resume_id=int(pk), batch=batch)
+        if result is None:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        resume, remaining = result
+        return Response({
+            "resume": ResumeOutputSerializer(resume).data,
+            "remaining": remaining,
+            "done": remaining == 0,
+        })
+
 
 class JobMatchViewSet(ViewSet):
     """POST /api/v1/matches/{id}/tailor/ → tailored resume as a PDF download."""

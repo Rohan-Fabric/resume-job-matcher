@@ -61,22 +61,10 @@ class ResumeMatchService:
             )
             for j in found
         ]
-        jobs = self.job_repo.bulk_create(rows)
-
-        # 3. score each job against the resume — concurrently, since each scoring
-        #    call is independent. LLM calls fan out in threads; DB writes happen
-        #    back on the main thread (Django ORM connections don't cross threads).
-        def _score(job):
-            return job.pk, self.llm.score(raw_text, job.jd_text)
-
-        if jobs:
-            with ThreadPoolExecutor(max_workers=len(jobs)) as pool:
-                scored = list(pool.map(_score, jobs))
-            for pk, verdict in scored:
-                self.job_repo.set_score(
-                    pk, fit_score=verdict["score"], reasoning=verdict["reasoning"]
-                )
-
+        self.job_repo.bulk_create(rows)
+        # Jobs are saved UNSCORED. The client scores them in batches via
+        # score_pending(), so cards appear immediately and fill in live instead
+        # of the user waiting on the whole scoring loop.
         return resume
 
     def find_more_jobs(
@@ -149,20 +137,34 @@ class ResumeMatchService:
             )
             for j in fresh
         ]
-        jobs = self.job_repo.bulk_create(rows)
+        self.job_repo.bulk_create(rows)  # unscored — scored progressively via score_pending()
+        return resume
 
-        if jobs:
+    def score_pending(self, *, resume_id: int, batch: int = 8):
+        """Score up to `batch` not-yet-scored jobs for this resume, in parallel.
+
+        Upload/search save jobs unscored; the client calls this repeatedly so
+        cards fill in live. Returns (resume, remaining); remaining == 0 means
+        scoring is complete. LLM calls fan out in threads; DB writes happen back
+        on this thread (Django ORM connections don't cross threads)."""
+        resume = self.resume_repo.get(resume_id)
+        if resume is None:
+            return None
+
+        pending = list(self.job_repo.pending_for_resume(resume_id, limit=batch))
+        if pending:
             def _score(job):
                 return job.pk, self.llm.score(resume.raw_text, job.jd_text)
 
-            with ThreadPoolExecutor(max_workers=len(jobs)) as pool:
-                scored = list(pool.map(_score, jobs))
+            with ThreadPoolExecutor(max_workers=len(pending)) as pool:
+                scored = list(pool.map(_score, pending))
             for pk, verdict in scored:
                 self.job_repo.set_score(
                     pk, fit_score=verdict["score"], reasoning=verdict["reasoning"]
                 )
 
-        return resume
+        remaining = self.job_repo.pending_for_resume(resume_id).count()
+        return resume, remaining
 
     def tailor_for_job(self, *, job_id: int) -> tuple[dict, str] | None:
         """Download flow (Option B): tailor the resume for one job, on demand.

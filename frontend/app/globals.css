@@ -2,17 +2,17 @@
 
 /* ───────────────────────── Brand tokens (fabric-inspired, higher contrast) ───────────────────────── */
 :root {
-  --bg: #eef1f5;
+  --bg: #f5f4fb;           /* soft lavender-white — premium base */
   --surface: #ffffff;
-  --ink: #060a12;
-  --ink-soft: #232b38;
-  --muted: #515b6b;
-  --line: #dde1e8;
-  --line-strong: #c2c8d2;
+  --ink: #0a0815;
+  --ink-soft: #2b2740;
+  --muted: #6b6680;
+  --line: #ebe9f4;         /* lavender-tinted hairline */
+  --line-strong: #d8d4e6;
 
   --brand: #5c2dba;        /* fabric violet */
   --brand-ink: #4a2299;    /* violet hover */
-  --brand-wash: #f0eaf8;   /* lavender tint */
+  --brand-wash: #f1ebfa;   /* lavender tint */
   --brand-glow: rgba(92, 45, 186, 0.18);
 
   --amber: #a86f00;
@@ -87,33 +87,50 @@ button:disabled {
   color: #7c40de;
 }
 
-/* soft violet glow behind the hero */
+/* layered violet glow behind the hero — premium, soft */
 .hero-glow {
   background:
-    radial-gradient(70% 55% at 50% -5%, var(--brand-glow) 0%, rgba(92, 45, 186, 0) 65%);
+    radial-gradient(58% 48% at 50% -8%, rgba(92, 45, 186, 0.13) 0%, rgba(92, 45, 186, 0) 60%),
+    radial-gradient(38% 36% at 88% 6%, rgba(165, 102, 242, 0.09) 0%, rgba(165, 102, 242, 0) 55%),
+    radial-gradient(34% 34% at 8% 14%, rgba(124, 64, 222, 0.07) 0%, rgba(124, 64, 222, 0) 55%);
 }
 
-/* card lift so things don't look flat/faded */
+/* card lift — soft violet-tinted depth (premium, not flat) */
 .card-lift {
   box-shadow:
-    0 1px 2px rgba(6, 10, 18, 0.04),
-    0 12px 32px -16px rgba(6, 10, 18, 0.22);
+    0 1px 2px rgba(40, 24, 90, 0.04),
+    0 18px 48px -24px rgba(40, 24, 90, 0.2);
 }
 
-/* interactive card — subtle shadow at rest, rises on hover (fabric-style) */
+/* interactive card — subtle at rest, rises on hover (fabric-style) */
 .card-interactive {
   transition:
-    transform 0.25s cubic-bezier(0.22, 1, 0.36, 1),
-    box-shadow 0.25s cubic-bezier(0.22, 1, 0.36, 1);
+    transform 0.3s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.3s cubic-bezier(0.22, 1, 0.36, 1);
   box-shadow:
-    0 1px 2px rgba(6, 10, 18, 0.04),
-    0 8px 24px -18px rgba(6, 10, 18, 0.2);
+    0 1px 2px rgba(40, 24, 90, 0.04),
+    0 10px 30px -20px rgba(40, 24, 90, 0.18);
 }
 .card-interactive:hover {
-  transform: translateY(-3px);
+  transform: translateY(-4px);
   box-shadow:
-    0 2px 4px rgba(6, 10, 18, 0.05),
-    0 22px 44px -22px rgba(6, 10, 18, 0.3);
+    0 2px 6px rgba(40, 24, 90, 0.06),
+    0 28px 56px -26px rgba(40, 24, 90, 0.3);
+}
+
+/* premium gradient primary button */
+.btn-primary {
+  background-image: linear-gradient(135deg, #6b3bd1 0%, var(--brand) 55%, var(--brand-ink) 100%);
+  box-shadow: 0 10px 24px -10px rgba(92, 45, 186, 0.5);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease;
+}
+.btn-primary:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.06);
+  box-shadow: 0 16px 32px -10px rgba(92, 45, 186, 0.55);
+}
+.btn-primary:active {
+  transform: translateY(0);
 }
 
 /* ───────────────────────── Motion ───────────────────────── */
@@ -201,3 +218,10 @@ button:disabled {
   50%      { transform: translateY(-5px); }
 }
 .float { animation: float 3.5s ease-in-out infinite; }
+
+/* live re-ranking — job cards slide into their new position as scores land
+   (View Transitions API; unsupported browsers just snap, no animation) */
+::view-transition-group(*) {
+  animation-duration: 0.45s;
+  animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+}

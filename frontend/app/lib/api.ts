@@ -52,6 +52,29 @@ export async function loadMoreJobs(
   return res.json();
 }
 
+export interface ScoreBatchResult {
+  resume: Resume;
+  remaining: number;
+  done: boolean;
+}
+
+/** Score the next batch of not-yet-scored jobs. Call repeatedly until `done`,
+ *  so the UI can fill cards in live instead of waiting for the whole loop. */
+export async function scoreBatch(
+  resumeId: number,
+  batch = 8,
+): Promise<ScoreBatchResult> {
+  const res = await fetch(`${BASE}/api/v1/resumes/${resumeId}/score/`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ batch }),
+  });
+  if (!res.ok) {
+    throw new Error(`Scoring failed (${res.status})`);
+  }
+  return res.json();
+}
+
 /** Tailor the resume for a job; the backend returns a ready-made PDF (blob). */
 export async function tailorForJob(jobId: number): Promise<Blob> {
   const res = await fetch(`${BASE}/api/v1/matches/${jobId}/tailor/`, {

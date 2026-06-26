@@ -36,10 +36,11 @@ export function ScoreRing({ score }: Props) {
     return () => cancelAnimationFrame(raf);
   }, [score, target]);
 
+  // null = not scored yet (the client scores progressively) → pulsing "scoring" ring
   if (score === null || score === undefined) {
     return (
-      <div className="grid h-16 w-16 place-items-center rounded-full border border-dashed border-line-strong text-xs text-muted">
-        n/a
+      <div className="grid h-16 w-16 place-items-center rounded-full border-2 border-dashed border-brand/40">
+        <span className="breathe h-2.5 w-2.5 rounded-full bg-brand" />
       </div>
     );
   }

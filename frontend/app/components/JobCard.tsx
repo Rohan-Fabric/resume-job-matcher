@@ -12,7 +12,7 @@ interface Props {
 }
 
 function tierLabel(score: number | null) {
-  if (score === null || score === undefined) return { text: "Not scored", color: "var(--muted)" };
+  if (score === null || score === undefined) return { text: "Scoring…", color: "var(--brand)" };
   if (score >= 7) return { text: "Strong fit", color: "var(--brand-ink)" };
   if (score >= 4) return { text: "Moderate fit", color: "var(--amber)" };
   return { text: "Low fit", color: "var(--rose)" };
@@ -75,7 +75,7 @@ export function JobCard({ job, rank, tailoring, onTailor }: Props) {
           </h3>
           <p className="text-sm text-ink-soft break-words">{job.company || "—"}</p>
 
-          {job.reasoning && (
+          {job.reasoning ? (
             <div className="mt-2.5">
               <p
                 className={`text-sm leading-relaxed text-ink-soft break-words ${
@@ -93,7 +93,13 @@ export function JobCard({ job, rank, tailoring, onTailor }: Props) {
                 </button>
               )}
             </div>
-          )}
+          ) : job.fit_score == null ? (
+            /* not scored yet — shimmer placeholder where the reasoning will land */
+            <div className="mt-3 space-y-2" aria-hidden="true">
+              <div className="skeleton h-3 w-full rounded-full" />
+              <div className="skeleton h-3 w-3/4 rounded-full" />
+            </div>
+          ) : null}
 
           <div className="mt-4 flex flex-wrap items-center gap-2.5">
             <a

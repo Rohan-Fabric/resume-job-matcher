@@ -27,6 +27,11 @@ class JobMatchRepository:
     def for_resume(self, resume_id: int):
         return JobMatch.objects.filter(resume_id=resume_id)
 
+    def pending_for_resume(self, resume_id: int, limit: int | None = None):
+        """Jobs for this resume that haven't been scored yet (fit_score is null)."""
+        qs = JobMatch.objects.filter(resume_id=resume_id, fit_score__isnull=True)
+        return qs[:limit] if limit else qs
+
     def delete_for_resume(self, resume_id: int) -> None:
         JobMatch.objects.filter(resume_id=resume_id).delete()
 

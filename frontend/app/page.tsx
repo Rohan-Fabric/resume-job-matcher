@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
-import { uploadResume, tailorForJob, loadMoreJobs } from "./lib/api";
+import { useRef, useState } from "react";
+import { flushSync } from "react-dom";
+import { uploadResume, tailorForJob, loadMoreJobs, scoreBatch } from "./lib/api";
 import type { JobMatch, Resume } from "./lib/types";
 import { UploadCard } from "./components/UploadCard";
 import { ProcessingPipeline } from "./components/ProcessingPipeline";
@@ -16,6 +17,9 @@ export default function Home() {
   const [done, setDone] = useState(false);
   const [resume, setResume] = useState<Resume | null>(null);
   const [error, setError] = useState("");
+  // progressive scoring — cards render unscored, then fill in batch-by-batch
+  const [scoring, setScoring] = useState(false);
+  const scoringRef = useRef<number | null>(null);
 
   // tailoring state
   const [activeJob, setActiveJob] = useState<JobMatch | null>(null);
@@ -49,9 +53,46 @@ export default function Home() {
       await new Promise((r) => setTimeout(r, 500));
       setResume(data);
       setPhase("results");
+      runScoring(data.id); // cards are up — now fill scores in live
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong");
       setPhase("error");
+    }
+  }
+
+  // Re-render under a View Transition so cards slide into their new ranked
+  // positions as scores land (falls back to an instant update where unsupported).
+  function animateTo(next: Resume) {
+    const doc = document as Document & {
+      startViewTransition?: (cb: () => void) => void;
+    };
+    if (doc.startViewTransition) {
+      doc.startViewTransition(() => flushSync(() => setResume(next)));
+    } else {
+      setResume(next);
+    }
+  }
+
+  // Score not-yet-scored jobs in batches until none remain, updating live.
+  async function runScoring(resumeId: number) {
+    if (scoringRef.current === resumeId) return; // already scoring this resume
+    scoringRef.current = resumeId;
+    setScoring(true);
+    try {
+      let done = false;
+      while (!done) {
+        const res = await scoreBatch(resumeId);
+        if (scoringRef.current !== resumeId) return; // superseded by a newer search
+        animateTo(res.resume);
+        done = res.done;
+      }
+    } catch (e) {
+      console.error("scoring failed", e); // leave cards unscored, don't crash the page
+    } finally {
+      if (scoringRef.current === resumeId) {
+        scoringRef.current = null;
+        setScoring(false);
+      }
     }
   }
 
@@ -103,6 +144,7 @@ export default function Home() {
       setResume(data);
       setPage(1);
       setApplied({ loc: useLoc, type: workType });
+      runScoring(data.id);
     } catch (e) {
       console.error("search failed", e);
     } finally {
@@ -123,6 +165,7 @@ export default function Home() {
       });
       setResume(data);
       setPage(next);
+      runScoring(data.id);
     } catch (e) {
       console.error("load more failed", e);
     } finally {
@@ -131,6 +174,8 @@ export default function Home() {
   }
 
   function reset() {
+    scoringRef.current = null; // stop any in-flight scoring loop
+    setScoring(false);
     setPhase("idle");
     setResume(null);
     setDone(false);
@@ -142,10 +187,11 @@ export default function Home() {
   }
 
   const matches = resume?.matches ?? [];
-  // best fit first, regardless of location (tier is just a label now)
+  // best fit first; unscored (null) sink to the bottom and rise as they're scored
   const sorted = [...matches].sort(
     (a, b) => (b.fit_score ?? -1) - (a.fit_score ?? -1),
   );
+  const scoredCount = matches.filter((m) => m.fit_score != null).length;
 
   return (
     <div className="hero-glow">
@@ -155,9 +201,11 @@ export default function Home() {
           <div className="fade-up">
             <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
               <div>
-                <h2 className="font-display text-3xl text-ink">Your matches</h2>
+                <h2 className="font-display text-4xl text-ink">Your matches</h2>
                 <p className="mt-1 text-sm text-muted">
-                  {sorted.length} {sorted.length === 1 ? "role" : "roles"} ranked by fit
+                  {scoring
+                    ? `Scoring ${scoredCount} of ${sorted.length} matches…`
+                    : `${sorted.length} ${sorted.length === 1 ? "role" : "roles"} ranked by fit`}
                   {resume.profile?.titles?.[0]
                     ? ` · based on your ${resume.profile.titles[0]} profile`
                     : ""}
@@ -220,7 +268,7 @@ export default function Home() {
                     <button
                       onClick={runSearch}
                       disabled={searching}
-                      className="rounded-full bg-brand px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-ink disabled:opacity-50"
+                      className="btn-primary rounded-full px-5 py-2 text-sm font-medium text-white disabled:opacity-50 disabled:shadow-none"
                     >
                       {searching ? "Searching…" : "Search"}
                     </button>
@@ -230,8 +278,8 @@ export default function Home() {
                   )}
                 </div>
 
-                {/* live loading bar — shows the backend call is running */}
-                {(searching || loadingMore) && (
+                {/* live loading bar — shows a backend call (search or scoring) is running */}
+                {(searching || loadingMore || scoring) && (
                   <div className="indet-track mb-4 h-1 w-full overflow-hidden rounded-full bg-line">
                     <div className="indet-bar" />
                   </div>
@@ -250,7 +298,11 @@ export default function Home() {
                 ) : (
                   <div className="space-y-3.5">
                     {sorted.map((job, i) => (
-                      <div key={job.id} className="fade-up" style={{ animationDelay: `${i * 70}ms` }}>
+                      <div
+                        key={job.id}
+                        className="fade-up"
+                        style={{ animationDelay: `${i * 70}ms`, viewTransitionName: `job-${job.id}` }}
+                      >
                         <JobCard
                           job={job}
                           rank={i + 1}
@@ -324,10 +376,10 @@ export default function Home() {
                   { n: "02", t: "Match", d: "We find live roles and score each by fit." },
                   { n: "03", t: "Tailor", d: "One click rewrites your CV for any job." },
                 ].map((s) => (
-                  <div key={s.n} className="rounded-xl border border-line bg-surface p-5">
-                    <span className="font-mono text-xs text-brand">{s.n}</span>
-                    <p className="mt-2 font-semibold text-ink">{s.t}</p>
-                    <p className="mt-1 text-sm text-ink-soft leading-relaxed">{s.d}</p>
+                  <div key={s.n} className="card-interactive rounded-2xl border border-line bg-surface p-6">
+                    <span className="font-mono text-sm font-medium text-brand">{s.n}</span>
+                    <p className="mt-3 font-semibold text-ink">{s.t}</p>
+                    <p className="mt-1.5 text-sm leading-relaxed text-ink-soft">{s.d}</p>
                   </div>
                 ))}
               </div>
