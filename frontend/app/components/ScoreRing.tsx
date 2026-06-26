@@ -1,13 +1,40 @@
+"use client";
+
+import { useEffect, useState } from "react";
+
 interface Props {
   score: number | null;
 }
 
-/** Circular fit-score gauge — number sits dead-centre inside the ring. */
+/** Circular fit-score gauge. On mount the ring sweeps from 0 and the number
+ *  counts up to the score — one rAF loop drives both so they stay in sync. */
 export function ScoreRing({ score }: Props) {
   const cx = 32;
   const cy = 32;
   const r = 26;
   const c = 2 * Math.PI * r;
+
+  const target = score ?? 0;
+  const [shown, setShown] = useState(0);
+
+  useEffect(() => {
+    if (score === null || score === undefined) return;
+    // respect reduced-motion: jump straight to the value
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      setShown(target);
+      return;
+    }
+    let raf = 0;
+    const start = performance.now();
+    const tick = (now: number) => {
+      const t = Math.min(1, (now - start) / 900);
+      const eased = 1 - Math.pow(1 - t, 3); // easeOutCubic — matches the app's curve
+      setShown(target * eased);
+      if (t < 1) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [score, target]);
 
   if (score === null || score === undefined) {
     return (
@@ -17,7 +44,7 @@ export function ScoreRing({ score }: Props) {
     );
   }
 
-  const pct = Math.max(0, Math.min(1, score / 10));
+  const pct = Math.max(0, Math.min(1, shown / 10));
   const color =
     score >= 7 ? "var(--brand)" : score >= 4 ? "var(--amber)" : "var(--rose)";
 
@@ -35,7 +62,6 @@ export function ScoreRing({ score }: Props) {
         strokeDasharray={c}
         strokeDashoffset={c * (1 - pct)}
         transform={`rotate(-90 ${cx} ${cy})`}
-        style={{ transition: "stroke-dashoffset 0.9s cubic-bezier(0.22,1,0.36,1)" }}
       />
       <text
         x={cx}
@@ -44,7 +70,7 @@ export function ScoreRing({ score }: Props) {
         dominantBaseline="central"
         style={{ fontSize: "17px", fontWeight: 700, fill: "var(--ink)" }}
       >
-        {score.toFixed(1)}
+        {shown.toFixed(1)}
       </text>
     </svg>
   );

@@ -276,88 +276,60 @@ export default function Home() {
             </div>
           </div>
         ) : (
-          /* ── Hero: copy left, interactive right (fills full width) ── */
+          /* ── Hero: centered, elegant ── */
           <>
-            <div className="grid gap-12 lg:grid-cols-2 lg:items-start lg:gap-16">
-              {/* left: copy */}
-              <div>
-                <span className="inline-flex items-center gap-2 rounded-full border border-brand/20 bg-brand-wash px-3 py-1.5 text-xs font-medium text-brand">
-                  <span className="live-dot h-1.5 w-1.5 rounded-full bg-brand" />
-                  Agentic AI for your job search
-                </span>
+            <div className="mx-auto flex max-w-3xl flex-col items-center text-center">
+              <h1 className="hero-headline">
+                Agentic AI for <em>your job search</em>
+              </h1>
 
-                <h1
-                  className="mt-6 font-display"
-                  style={{
-                    fontSize: "clamp(2rem, 4vw, 3rem)",
-                    fontWeight: 400,
-                    lineHeight: 1.1,
-                    letterSpacing: "-1.5px",
-                    color: "#222",
-                  }}
-                >
-                  Upload once.{" "}
-                  <em style={{ fontStyle: "italic", color: "#7c40de" }}>
-                    Match everywhere.
-                  </em>
-                </h1>
+              <p className="mt-5 max-w-xl text-[1.05rem] leading-relaxed text-muted">
+                Reading your resume, sourcing live roles, scoring every match, and
+                tailoring your CV — each run by a specialized agent, coordinated as
+                one team. You review ranked matches instead of doing the steps.
+              </p>
+            </div>
 
-                <p
-                  style={{
-                    marginTop: "1.1rem",
-                    fontSize: "1.05rem",
-                    lineHeight: 1.6,
-                    color: "#555",
-                    maxWidth: "28rem",
-                  }}
-                >
-                  Reading your resume, sourcing live roles, scoring every match, and
-                  tailoring your CV — each run by a specialized agent, coordinated as
-                  one team. You review ranked matches instead of doing the steps.
-                </p>
-              </div>
+            {/* interactive — centered below the copy */}
+            <div id="upload" className="mx-auto mt-10 w-full max-w-xl">
+              {phase === "idle" && <UploadCard onSubmit={handleUpload} />}
 
-              {/* right: interactive */}
-              <div id="upload" className="w-full lg:mt-12">
-                {phase === "idle" && <UploadCard onSubmit={handleUpload} />}
+              {phase === "processing" && (
+                <div className="rounded-2xl border border-line bg-surface px-8 py-12 card-lift">
+                  <ProcessingPipeline done={done} />
+                </div>
+              )}
 
-                {phase === "processing" && (
-                  <div className="rounded-2xl border border-line bg-surface px-8 py-12 card-lift">
-                    <ProcessingPipeline done={done} />
-                  </div>
-                )}
-
-                {phase === "error" && (
-                  <div className="rounded-2xl border border-rose/30 bg-rose-wash p-6 text-center fade-up">
-                    <p className="font-medium text-ink">We couldn&apos;t process that</p>
-                    <p className="mt-1 text-sm text-ink-soft">{error}</p>
-                    <button
-                      onClick={reset}
-                      className="mt-4 rounded-lg bg-ink px-4 py-2 text-sm font-medium text-white"
-                    >
-                      Try again
-                    </button>
-                  </div>
-                )}
-              </div>
+              {phase === "error" && (
+                <div className="rounded-2xl border border-rose/30 bg-rose-wash p-6 text-center fade-up">
+                  <p className="font-medium text-ink">We couldn&apos;t process that</p>
+                  <p className="mt-1 text-sm text-ink-soft">{error}</p>
+                  <button
+                    onClick={reset}
+                    className="mt-4 rounded-lg bg-ink px-4 py-2 text-sm font-medium text-white"
+                  >
+                    Try again
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* How it works — stays visible through upload + loading */}
-            <div id="how" className="mt-24">
-                <div className="grid gap-6 sm:grid-cols-3">
-                  {[
-                    { n: "01", t: "Upload", d: "Drop your PDF resume. We read it instantly." },
-                    { n: "02", t: "Match", d: "We find live roles and score each by fit." },
-                    { n: "03", t: "Tailor", d: "One click rewrites your CV for any job." },
-                  ].map((s) => (
-                    <div key={s.n} className="rounded-xl border border-line bg-surface p-5">
-                      <span className="font-mono text-xs text-brand">{s.n}</span>
-                      <p className="mt-2 font-semibold text-ink">{s.t}</p>
-                      <p className="mt-1 text-sm text-ink-soft leading-relaxed">{s.d}</p>
-                    </div>
-                  ))}
-                </div>
+            <div id="how" className="mx-auto mt-24 max-w-4xl">
+              <div className="grid gap-6 sm:grid-cols-3">
+                {[
+                  { n: "01", t: "Upload", d: "Drop your PDF resume. We read it instantly." },
+                  { n: "02", t: "Match", d: "We find live roles and score each by fit." },
+                  { n: "03", t: "Tailor", d: "One click rewrites your CV for any job." },
+                ].map((s) => (
+                  <div key={s.n} className="rounded-xl border border-line bg-surface p-5">
+                    <span className="font-mono text-xs text-brand">{s.n}</span>
+                    <p className="mt-2 font-semibold text-ink">{s.t}</p>
+                    <p className="mt-1 text-sm text-ink-soft leading-relaxed">{s.d}</p>
+                  </div>
+                ))}
               </div>
+            </div>
           </>
         )}
       </div>

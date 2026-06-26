@@ -53,11 +53,42 @@ body {
   text-rendering: optimizeLegibility;
 }
 
+/* clickable elements show the right cursor (Tailwind's reset defaults buttons
+   to the arrow) — covers every button/role=button app-wide in one rule */
+button:not(:disabled),
+[role="button"],
+label[for] {
+  cursor: pointer;
+}
+button:disabled {
+  cursor: not-allowed;
+}
+
 /* Fabric display headlines — Instrument Serif */
 .font-display {
   font-family: var(--font-instrument-serif), Georgia, serif;
   font-weight: 400;
   letter-spacing: -0.01em;
+}
+
+/* Hero headline — bold high-contrast serif, italic violet accent block
+   (Playfair Display, like the fabric reference) */
+.hero-headline {
+  font-family: var(--font-playfair), "Playfair Display", Georgia, serif;
+  font-size: clamp(2.5rem, 6vw, 4.25rem);
+  font-weight: 700;
+  line-height: 1.08;
+  letter-spacing: -0.02em;
+  color: #1a1a1a;
+  text-align: center;
+  max-width: 900px;
+  margin: 0 auto;
+}
+.hero-headline em {
+  display: block;
+  font-style: italic;
+  font-weight: 700;
+  color: var(--brand);
 }
 
 /* soft violet glow behind the hero */
@@ -71,6 +102,22 @@ body {
   box-shadow:
     0 1px 2px rgba(6, 10, 18, 0.04),
     0 12px 32px -16px rgba(6, 10, 18, 0.22);
+}
+
+/* interactive card — subtle shadow at rest, rises on hover (fabric-style) */
+.card-interactive {
+  transition:
+    transform 0.25s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.25s cubic-bezier(0.22, 1, 0.36, 1);
+  box-shadow:
+    0 1px 2px rgba(6, 10, 18, 0.04),
+    0 8px 24px -18px rgba(6, 10, 18, 0.2);
+}
+.card-interactive:hover {
+  transform: translateY(-3px);
+  box-shadow:
+    0 2px 4px rgba(6, 10, 18, 0.05),
+    0 22px 44px -22px rgba(6, 10, 18, 0.3);
 }
 
 /* ───────────────────────── Motion ───────────────────────── */

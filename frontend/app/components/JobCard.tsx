@@ -1,3 +1,6 @@
+"use client";
+
+import { useState } from "react";
 import type { JobMatch } from "../lib/types";
 import { ScoreRing } from "./ScoreRing";
 
@@ -15,6 +18,14 @@ function tierLabel(score: number | null) {
   return { text: "Low fit", color: "var(--rose)" };
 }
 
+/** Accent colour for the card's left strip — mirrors the score-ring tiers. */
+function accentColor(score: number | null): string {
+  if (score === null || score === undefined) return "var(--line-strong)";
+  if (score >= 7) return "var(--brand)";
+  if (score >= 4) return "var(--amber)";
+  return "var(--rose)";
+}
+
 /** Show the job's actual city/area. Falls back to country only if the source
  *  gave no location. Remote roles are flagged as such. */
 function locationLabel(job: JobMatch): string {
@@ -26,10 +37,20 @@ function locationLabel(job: JobMatch): string {
 
 export function JobCard({ job, rank, tailoring, onTailor }: Props) {
   const tier = tierLabel(job.fit_score);
+  const [expanded, setExpanded] = useState(false);
+  // only offer the toggle when the text is long enough to actually clamp
+  const clampable = (job.reasoning?.length ?? 0) > 90;
 
   return (
-    <article className="group relative overflow-hidden rounded-2xl border border-line bg-surface p-5 transition-all hover:border-line-strong hover:card-lift">
-      <div className="flex gap-4">
+    <article className="group card-interactive relative overflow-hidden rounded-2xl border border-line bg-surface p-5">
+      {/* tier accent strip — reads fit level at a glance */}
+      <span
+        aria-hidden
+        className="absolute inset-y-0 left-0 w-1"
+        style={{ background: accentColor(job.fit_score) }}
+      />
+
+      <div className="flex gap-4 pl-1">
         {/* score gauge */}
         <div className="flex flex-col items-center gap-1.5 pt-0.5">
           <ScoreRing score={job.fit_score} />
@@ -55,9 +76,23 @@ export function JobCard({ job, rank, tailoring, onTailor }: Props) {
           <p className="text-sm text-ink-soft break-words">{job.company || "—"}</p>
 
           {job.reasoning && (
-            <p className="mt-2.5 text-sm leading-relaxed text-ink-soft break-words">
-              {job.reasoning}
-            </p>
+            <div className="mt-2.5">
+              <p
+                className={`text-sm leading-relaxed text-ink-soft break-words ${
+                  expanded ? "" : "line-clamp-2"
+                }`}
+              >
+                {job.reasoning}
+              </p>
+              {clampable && (
+                <button
+                  onClick={() => setExpanded((v) => !v)}
+                  className="mt-1 text-xs font-medium text-brand transition-colors hover:text-brand-ink"
+                >
+                  {expanded ? "Show less" : "Show more"}
+                </button>
+              )}
+            </div>
           )}
 
           <div className="mt-4 flex flex-wrap items-center gap-2.5">
