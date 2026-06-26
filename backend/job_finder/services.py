@@ -31,7 +31,7 @@ class ResumeMatchService:
         self.llm = LLMClient()
         self.jobs = JobsClient()
 
-    def process_resume(self, *, file_url: str, raw_text: str):
+    def process_resume(self, *, raw_text: str):
         """Upload flow: persist resume, extract profile, find + score jobs.
 
         Raises ValueError if the text yields no usable profile (not a resume)."""
@@ -41,7 +41,7 @@ class ResumeMatchService:
         if not (profile_data["name"] or profile_data["skills"] or profile_data["titles"]):
             raise ValueError("not_a_resume")
 
-        resume = self.resume_repo.create(file_url=file_url, raw_text=raw_text)
+        resume = self.resume_repo.create(raw_text=raw_text)
         self.profile_repo.create(resume=resume, **profile_data)
         self.resume_repo.mark_parsed(resume.pk)
 

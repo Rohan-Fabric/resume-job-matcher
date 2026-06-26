@@ -5,8 +5,8 @@ from .models import CandidateProfile, JobMatch, Resume, TailoredResume
 
 
 class ResumeRepository:
-    def create(self, *, file_url: str, raw_text: str) -> Resume:
-        return Resume.objects.create(file_url=file_url, raw_text=raw_text)
+    def create(self, *, raw_text: str) -> Resume:
+        return Resume.objects.create(raw_text=raw_text)
 
     def get(self, resume_id: int) -> Resume | None:
         return Resume.objects.filter(pk=resume_id).first()

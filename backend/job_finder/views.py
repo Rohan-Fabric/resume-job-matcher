@@ -1,5 +1,4 @@
 """API surface. Views receive requests, call the service, shape the response."""
-from django.core.files.storage import default_storage
 from django.http import HttpResponse
 from rest_framework import status
 from rest_framework.decorators import action
@@ -38,13 +37,10 @@ class ResumeViewSet(ViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        saved_path = default_storage.save(f"resumes/{upload.name}", upload)
-        file_url = default_storage.url(saved_path)
-
+        # The PDF itself is never read again (scoring + tailoring use raw_text),
+        # so we don't persist the file — just keep the extracted text.
         try:
-            resume = ResumeMatchService().process_resume(
-                file_url=file_url, raw_text=raw_text
-            )
+            resume = ResumeMatchService().process_resume(raw_text=raw_text)
         except ValueError:
             return Response(
                 {"detail": "This doesn't look like a resume — we couldn't find a "

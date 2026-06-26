@@ -9,9 +9,9 @@ from django.db import models
 
 
 class Resume(models.Model):
-    """An uploaded resume: the file plus its extracted plain text."""
+    """An uploaded resume, stored as its extracted plain text (the PDF itself is
+    never persisted — only the text is needed for scoring + tailoring)."""
 
-    file_url = models.URLField(blank=True)
     raw_text = models.TextField(blank=True)
     is_parsed = models.BooleanField(default=False)
     created_date = models.DateTimeField(auto_now_add=True)
