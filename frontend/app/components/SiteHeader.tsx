@@ -37,7 +37,6 @@ export function SiteHeader() {
               </linearGradient>
             </defs>
           </svg>
-          <span className="h-5 w-px bg-line-strong" aria-hidden />
           <span className="text-lg font-medium leading-none tracking-tight text-[#222222]">
             JobMatch
           </span>
