@@ -1,34 +1,6 @@
 import type { CandidateProfile } from "../lib/types";
-
-/* inline icons — currentColor so they inherit hover/text color, no icon dep */
-const ICON = "h-[18px] w-[18px]";
-const IconMail = () => (
-  <svg viewBox="0 0 24 24" className={ICON} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <rect x="3" y="5" width="18" height="14" rx="2" />
-    <path d="m3 7 9 6 9-6" />
-  </svg>
-);
-const IconPhone = () => (
-  <svg viewBox="0 0 24 24" className={ICON} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z" />
-  </svg>
-);
-const IconLinkedIn = () => (
-  <svg viewBox="0 0 24 24" className={ICON} fill="currentColor">
-    <path d="M4.98 3.5C4.98 4.88 3.87 6 2.5 6S0 4.88 0 3.5 1.12 1 2.5 1 4.98 2.12 4.98 3.5zM0 8h5v16H0V8zm7.5 0h4.78v2.2h.07c.67-1.2 2.3-2.46 4.73-2.46C21.8 7.74 24 10 24 14.6V24h-5v-8.2c0-1.96-.04-4.48-2.73-4.48-2.73 0-3.15 2.13-3.15 4.34V24h-5V8z" />
-  </svg>
-);
-const IconGitHub = () => (
-  <svg viewBox="0 0 24 24" className={ICON} fill="currentColor">
-    <path d="M12 .5C5.37.5 0 5.87 0 12.5c0 5.3 3.44 9.8 8.21 11.39.6.11.82-.26.82-.58v-2.03c-3.34.73-4.04-1.61-4.04-1.61-.55-1.39-1.34-1.76-1.34-1.76-1.09-.75.08-.73.08-.73 1.2.08 1.84 1.24 1.84 1.24 1.07 1.83 2.81 1.3 3.5.99.11-.78.42-1.3.76-1.6-2.67-.3-5.47-1.34-5.47-5.95 0-1.31.47-2.39 1.24-3.23-.13-.3-.54-1.52.12-3.18 0 0 1.01-.32 3.3 1.23a11.5 11.5 0 016 0c2.29-1.55 3.3-1.23 3.3-1.23.66 1.66.25 2.88.12 3.18.77.84 1.24 1.92 1.24 3.23 0 4.62-2.81 5.64-5.49 5.94.43.37.81 1.1.81 2.22v3.29c0 .32.22.7.83.58A12.01 12.01 0 0024 12.5C24 5.87 18.63.5 12 .5z" />
-  </svg>
-);
-const IconPin = () => (
-  <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
-    <circle cx="12" cy="10" r="3" />
-  </svg>
-);
+import { Mail, Phone, MapPin } from "lucide-react";
+import { FaLinkedin, FaGithub } from "react-icons/fa";
 
 function ContactBtn({
   href, label, external, children,
@@ -41,7 +13,7 @@ function ContactBtn({
       title={label}
       aria-label={label}
       {...(external ? { target: "_blank", rel: "noopener noreferrer" } : {})}
-      className="grid h-11 w-11 place-items-center rounded-full border border-line text-ink-soft transition-all hover:border-brand hover:bg-brand-wash hover:text-brand hover:-translate-y-0.5"
+      className="group grid h-11 w-11 place-items-center rounded-full border border-line text-ink-soft transition-all duration-300 hover:border-brand hover:bg-brand hover:text-white hover:scale-110 hover:shadow-lg hover:shadow-brand/25"
     >
       {children}
     </a>
@@ -83,7 +55,7 @@ export function ProfileSummary({ profile }: { profile: CandidateProfile }) {
         )}
         {place && (
           <p className="mt-1.5 flex items-center justify-center gap-1 text-sm text-muted">
-            <IconPin />
+            <MapPin className="h-3.5 w-3.5" />
             {place}
           </p>
         )}
@@ -93,22 +65,22 @@ export function ProfileSummary({ profile }: { profile: CandidateProfile }) {
           <div className="mt-5 flex justify-center gap-2.5">
             {profile.email && (
               <ContactBtn href={`mailto:${profile.email}`} label={profile.email}>
-                <IconMail />
+                <Mail className="h-[18px] w-[18px]" />
               </ContactBtn>
             )}
             {profile.phone && (
               <ContactBtn href={`tel:${profile.phone}`} label={profile.phone}>
-                <IconPhone />
+                <Phone className="h-[18px] w-[18px]" />
               </ContactBtn>
             )}
             {profile.linkedin && (
               <ContactBtn href={profile.linkedin} label="LinkedIn" external>
-                <IconLinkedIn />
+                <FaLinkedin className="h-[18px] w-[18px]" />
               </ContactBtn>
             )}
             {profile.github && (
               <ContactBtn href={profile.github} label="GitHub" external>
-                <IconGitHub />
+                <FaGithub className="h-[18px] w-[18px]" />
               </ContactBtn>
             )}
           </div>
