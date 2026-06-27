@@ -9,6 +9,7 @@ import { ProcessingPipeline } from "./components/ProcessingPipeline";
 import { ProfileSummary } from "./components/ProfileSummary";
 import { JobCard } from "./components/JobCard";
 import { TailoringOverlay } from "./components/TailoringOverlay";
+import { HowItWorks } from "./components/HowItWorks";
 
 type Phase = "idle" | "processing" | "results" | "error";
 
@@ -369,21 +370,7 @@ export default function Home() {
             </div>
 
             {/* How it works — stays visible through upload + loading */}
-            <div id="how" className="mx-auto mt-24 max-w-4xl">
-              <div className="grid gap-6 sm:grid-cols-3">
-                {[
-                  { n: "01", t: "Upload", d: "Drop your PDF resume. We read it instantly." },
-                  { n: "02", t: "Match", d: "We find live roles and score each by fit." },
-                  { n: "03", t: "Tailor", d: "One click rewrites your CV for any job." },
-                ].map((s) => (
-                  <div key={s.n} className="card-interactive rounded-2xl border border-line bg-surface p-6">
-                    <span className="font-mono text-sm font-medium text-brand">{s.n}</span>
-                    <p className="mt-3 font-semibold text-ink">{s.t}</p>
-                    <p className="mt-1.5 text-sm leading-relaxed text-ink-soft">{s.d}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
+            <HowItWorks />
           </>
         )}
       </div>
