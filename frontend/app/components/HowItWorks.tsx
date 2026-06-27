@@ -66,9 +66,9 @@ export function HowItWorks() {
           <div
             key={step.number}
             data-aos={step.aos}
-            className="group relative"
+            className="group relative h-full"
           >
-            <div className="card-interactive relative rounded-3xl border border-line bg-surface p-8 overflow-hidden">
+            <div className="card-interactive relative h-full rounded-3xl border border-line bg-surface p-8 overflow-hidden flex flex-col">
               {/* Premium gradient accent */}
               <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-brand/5 to-transparent rounded-full blur-2xl group-hover:from-brand/10 transition-all duration-500" />
               
