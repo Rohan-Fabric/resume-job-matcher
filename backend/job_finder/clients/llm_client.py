@@ -278,16 +278,22 @@ Respond ONLY with JSON, no other text:
         """Lightweight scoring: resume + JD → {score, one_line_summary}.
         Fast evaluation so card badges appear in seconds."""
         prompt = f"""Job description:
-{jd_text[:1500]}
+{jd_text[:3500]}
 
 Candidate resume:
-{resume_text[:1500]}
+{resume_text[:3500]}
 
-Score this candidate's fit from 0-10 and provide a one concise sentence summarizing the match quality.
+Evaluate this candidate's fit for the role on a 0 to 10 scale.
+Scoring Rubric:
+- 8 to 10: Excellent/Strong fit. Candidate has the core domain skills, relevant title/experience, or strong transferable qualifications.
+- 5 to 7: Moderate fit. Candidate has foundational skills or partial overlap.
+- 0 to 4: Weak fit. Completely unrelated field or major missing requirements.
+
+Note: If the candidate is applying for SDE, intern, entry-level, or general software roles and has solid academic projects, skills, or transferable background, score them generously (8-10). Do not penalize interns or freshers for years of experience or missing niche buzzwords.
 Respond ONLY with JSON, no other text:
 {{"score": 0, "one_line_summary": ""}}"""
         try:
-            raw = _parse_json(_complete(prompt, max_tokens=60))
+            raw = _parse_json(_complete(prompt, max_tokens=100))
         except (json.JSONDecodeError, Exception):
             raw = {}
         return {
