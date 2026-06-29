@@ -1,8 +1,10 @@
+import Link from "next/link";
+
 export function SiteHeader() {
   return (
     <header className="absolute inset-x-0 top-0 z-30">
-      <div className="mx-auto flex h-16 max-w-6xl items-center px-6">
-        <a href="/" className="group flex items-center gap-3">
+      <div className="mx-auto flex h-16 max-w-[1680px] items-center px-6 lg:px-8">
+        <Link href="/" className="group flex items-center gap-3">
           {/* official fabric logo (icon + wordmark) */}
           <svg
             width="133"
@@ -40,7 +42,7 @@ export function SiteHeader() {
           <span className="text-lg font-medium leading-none tracking-tight text-[#222222]">
             JobMatch
           </span>
-        </a>
+        </Link>
       </div>
     </header>
   );

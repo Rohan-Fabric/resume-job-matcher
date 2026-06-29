@@ -34,8 +34,9 @@ class CandidateProfile(models.Model):
     linkedin = models.URLField(blank=True)
     github = models.URLField(blank=True)
     skills = models.JSONField(default=list)   # ["Python", "Django"]
-    titles = models.JSONField(default=list)   # ["Backend Engineer"]
+    titles = models.JSONField(default=list)   # ["Backend Engineer"] - detected from resume
     years_experience = models.FloatField(null=True, blank=True)
+    search_role = models.CharField(max_length=255, blank=True)  # User's custom search role override
 
     def __str__(self) -> str:
         return f"CandidateProfile<{self.name or self.pk}>"
@@ -59,6 +60,22 @@ class JobMatch(models.Model):
     fit_score = models.FloatField(null=True, blank=True)   # 0–10
     reasoning = models.TextField(blank=True)
     created_date = models.DateTimeField(auto_now_add=True)
+
+    # metadata the source APIs return but we used to discard
+    posted_at = models.DateTimeField(null=True, blank=True)
+    salary_raw = models.CharField(max_length=120, blank=True)  # source's own salary string, for display
+    salary_min = models.FloatField(null=True, blank=True)      # first number parsed out of salary_raw, for filtering
+    salary_max = models.FloatField(null=True, blank=True)      # maximum salary, for range display
+    currency = models.CharField(max_length=8, blank=True)      # USD, EUR, GBP, INR, etc.
+    salary_period = models.CharField(max_length=16, blank=True)  # annual, monthly, hourly
+    job_type = models.CharField(max_length=32, blank=True)     # full_time / part_time / contract / internship / temporary
+    source = models.CharField(max_length=16, blank=True)       # adzuna / jooble / remotive
+
+    # scoring detail beyond the bare fit_score
+    experience_fit = models.CharField(max_length=32, blank=True)  # e.g. "Good fit", "Underqualified"
+    one_line_summary = models.CharField(max_length=128, blank=True)  # concise match summary
+    matched_skills = models.JSONField(default=list, blank=True)
+    missing_skills = models.JSONField(default=list, blank=True)
 
     class Meta:
         # best fit first, regardless of location (tier is shown only as a label)

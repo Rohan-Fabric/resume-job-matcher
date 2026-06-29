@@ -7,8 +7,9 @@ export interface CandidateProfile {
   linkedin: string;
   github: string;
   skills: string[];
-  titles: string[];
+  titles: string[];  // detected roles from resume
   years_experience: number | null;
+  search_role: string;  // user's custom search role override
 }
 
 export interface JobMatch {
@@ -22,6 +23,26 @@ export interface JobMatch {
   tier: number;
   fit_score: number | null;
   reasoning: string;
+  posted_at: string | null;
+  salary_raw: string;
+  salary_min: number | null;
+  salary_max: number | null;
+  currency: string;
+  salary_period: string;
+  job_type: string;
+  source: string;
+  experience_fit: string;
+  one_line_summary: string;
+  matched_skills: string[];
+  missing_skills: string[];
+}
+
+export interface JobFilters {
+  postedWithin?: 1 | 7 | 30;
+  jobType?: string[];
+  minSalary?: number;
+  remote?: boolean;
+  source?: string[];
 }
 
 export interface Resume {

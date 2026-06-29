@@ -1,4 +1,4 @@
-import type { Resume } from "./types";
+import type { JobFilters, Resume } from "./types";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -28,6 +28,7 @@ export interface JobSearchOpts {
   location?: string;
   workType?: "remote" | "onsite" | "hybrid";
   replace?: boolean;
+  role?: string; // overrides the resume's detected title for this search only
 }
 
 /** Fetch + score jobs (deduped server-side). replace=true clears prior matches. */
@@ -44,10 +45,38 @@ export async function loadMoreJobs(
       location: opts.location || undefined,
       work_type: opts.workType,
       replace: opts.replace,
+      role: opts.role || undefined,
     }),
   });
   if (!res.ok) {
     throw new Error(`Job search failed (${res.status})`);
+  }
+  return res.json();
+}
+
+/** JobFilters → the query-param shape the backend's _filter_kwargs() expects.
+ *  Shared by fetchFilteredResume (GET query string) and scoreBatch (POST body) —
+ *  both need the active filter to reach the backend identically. */
+function filterParams(filters: JobFilters): Record<string, string> {
+  const params: Record<string, string> = {};
+  if (filters.postedWithin) params.posted_within = String(filters.postedWithin);
+  if (filters.jobType?.length) params.job_type = filters.jobType.join(",");
+  if (filters.minSalary) params.min_salary = String(filters.minSalary);
+  if (filters.remote !== undefined) params.remote = String(filters.remote);
+  if (filters.source?.length) params.source = filters.source.join(",");
+  return params;
+}
+
+/** Re-fetch the resume with its matches narrowed server-side by `filters` —
+ *  no new job-search API call, just a different query against saved jobs. */
+export async function fetchFilteredResume(
+  resumeId: number,
+  filters: JobFilters = {},
+): Promise<Resume> {
+  const params = new URLSearchParams(filterParams(filters));
+  const res = await fetch(`${BASE}/api/v1/resumes/${resumeId}/?${params.toString()}`);
+  if (!res.ok) {
+    throw new Error(`Filter fetch failed (${res.status})`);
   }
   return res.json();
 }
@@ -59,15 +88,19 @@ export interface ScoreBatchResult {
 }
 
 /** Score the next batch of not-yet-scored jobs. Call repeatedly until `done`,
- *  so the UI can fill cards in live instead of waiting for the whole loop. */
+ *  so the UI can fill cards in live instead of waiting for the whole loop.
+ *  `filters` keeps the response's matches narrowed to whatever's currently
+ *  active — every job still gets scored regardless, this only affects which
+ *  ones come back in THIS response, so a live poll can't undo an active filter. */
 export async function scoreBatch(
   resumeId: number,
   batch = 8,
+  filters: JobFilters = {},
 ): Promise<ScoreBatchResult> {
   const res = await fetch(`${BASE}/api/v1/resumes/${resumeId}/score/`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ batch }),
+    body: JSON.stringify({ batch, ...filterParams(filters) }),
   });
   if (!res.ok) {
     throw new Error(`Scoring failed (${res.status})`);

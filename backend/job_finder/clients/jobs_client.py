@@ -11,11 +11,15 @@ result set across four tiers, biased toward the candidate's actual skills:
 """
 from __future__ import annotations
 
+import html
 import re
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timezone as dt_timezone
 
 import requests
 from django.conf import settings
+
+SOURCE_TIMEOUT = 5  # seconds — one slow provider must never stall the whole search
 
 ADZUNA_COUNTRIES = {
     "gb", "us", "at", "au", "be", "br", "ca", "ch", "de", "es",
@@ -72,6 +76,76 @@ def _clean_role(title: str) -> str:
     title = re.split(r"\s+(?:at|@|for)\s+", title, flags=re.IGNORECASE)[0]
     title = re.split(r"\s*[|,/\-–—]\s*", title)[0]
     return title.strip()
+
+
+def _strip_html(text: str) -> str:
+    """Raw HTML (Remotive descriptions) → clean, readable plain text."""
+    text = re.sub(r"<[^>]+>", " ", text)
+    text = html.unescape(text)
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def _format_adzuna_salary(lo: float | None, hi: float | None) -> str:
+    """Adzuna gives numeric min/max with no currency string. A single-value
+    posting has min == max — show it once instead of '224266-224266'."""
+    if not lo or not hi:
+        return ""
+    return f"${lo:,.0f}" if lo == hi else f"${lo:,.0f}-${hi:,.0f}"
+
+
+def _detect_currency(salary_str: str) -> str:
+    """Extract currency from salary string. Default to USD if not found."""
+    if not salary_str:
+        return "USD"
+    if "£" in salary_str or "GBP" in salary_str.upper():
+        return "GBP"
+    if "€" in salary_str or "EUR" in salary_str.upper():
+        return "EUR"
+    if "₹" in salary_str or "INR" in salary_str.upper():
+        return "INR"
+    if "$" in salary_str or "USD" in salary_str.upper():
+        return "USD"
+    return "USD"
+
+
+def _detect_salary_period(salary_str: str, job_data: dict) -> str:
+    """Detect if salary is annual, monthly, or hourly."""
+    combined = f"{salary_str} {job_data.get('description', '')}".lower()
+    if any(word in combined for word in ["/hr", "per hour", "hourly", "hour"]):
+        return "hourly"
+    if any(word in combined for word in ["/mo", "per month", "monthly", "month"]):
+        return "monthly"
+    # Default to annual for most job postings
+    return "annual"
+
+
+def _parse_salary_max(salary_raw: str) -> float | None:
+    """Extract maximum salary from range like '$90,000 - $120,000' → 120000.0"""
+    numbers = re.findall(r"[\d,]+(?:\.\d+)?", salary_raw)
+    if len(numbers) >= 2:
+        return float(numbers[-1].replace(",", ""))
+    return None
+
+
+def _parse_salary_min(salary_raw: str) -> float | None:
+    """First number in the source's raw salary string, for >= filtering.
+    '$90,000 - $120,000' → 90000.0. No number → None (filter just skips it)."""
+    m = re.search(r"[\d,]+(?:\.\d+)?", salary_raw)
+    return float(m.group().replace(",", "")) if m else None
+
+
+def _parse_date(value: str) -> datetime | None:
+    """Best-effort ISO date parse. Sources disagree on format — never let a
+    bad/missing date blow up ingestion, just store None. Some sources (Jooble)
+    give no timezone at all; assume UTC rather than store a naive datetime
+    into a USE_TZ=True field."""
+    if not value:
+        return None
+    try:
+        dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return dt if dt.tzinfo else dt.replace(tzinfo=dt_timezone.utc)
 
 
 def _is_real_city(location: str, home: str) -> bool:
@@ -178,11 +252,11 @@ class JobsClient:
 
     def _fetch(self, url: str, params: dict) -> list[dict]:
         try:
-            r = requests.get(url, params=params, timeout=15)
+            r = requests.get(url, params=params, timeout=SOURCE_TIMEOUT)
             r.raise_for_status()
             return r.json().get("results", [])
         except requests.RequestException:
-            return []
+            return []  # provider down/slow/timed out — other sources still return
 
     def _fetch_jooble(self, keywords: str, location: str, page: int = 1) -> list[dict]:
         """Jooble: free key, broad coverage similar to Adzuna. Returns shaped dicts."""
@@ -192,7 +266,7 @@ class JobsClient:
             r = requests.post(
                 f"https://jooble.org/api/{settings.JOOBLE_API_KEY}",
                 json={"keywords": keywords, "location": location, "page": str(page)},
-                timeout=15,
+                timeout=SOURCE_TIMEOUT,
             )
             r.raise_for_status()
             jobs = r.json().get("jobs", [])
@@ -206,6 +280,14 @@ class JobsClient:
                 "source_url": j.get("link", "") or "",
                 "location": j.get("location", "") or "",
                 "is_remote": "remote" in f"{j.get('title', '')} {j.get('snippet', '')}".lower(),
+                "posted_at": _parse_date(j.get("updated", "")),
+                "salary_raw": j.get("salary", "") or "",
+                "salary_min": _parse_salary_min(j.get("salary", "") or ""),
+                "salary_max": _parse_salary_max(j.get("salary", "") or ""),
+                "currency": _detect_currency(j.get("salary", "") or ""),
+                "salary_period": _detect_salary_period(j.get("salary", "") or "", j),
+                "job_type": j.get("type", "") or "",
+                "source": "jooble",
             }
             for j in jobs[:PER_PAGE]
         ]
@@ -216,7 +298,7 @@ class JobsClient:
             r = requests.get(
                 "https://remotive.com/api/remote-jobs",
                 params={"search": search, "limit": PER_PAGE},
-                timeout=15,
+                timeout=SOURCE_TIMEOUT,
             )
             r.raise_for_status()
             jobs = r.json().get("jobs", [])
@@ -226,10 +308,18 @@ class JobsClient:
             {
                 "title": j.get("title", "") or "",
                 "company": j.get("company_name", "") or "",
-                "jd_text": j.get("description", "") or "",
+                "jd_text": _strip_html(j.get("description", "") or ""),
                 "source_url": j.get("url", "") or "",
                 "location": j.get("candidate_required_location", "") or "",
                 "is_remote": True,
+                "posted_at": _parse_date(j.get("publication_date", "")),
+                "salary_raw": j.get("salary", "") or "",
+                "salary_min": _parse_salary_min(j.get("salary", "") or ""),
+                "salary_max": _parse_salary_max(j.get("salary", "") or ""),
+                "currency": _detect_currency(j.get("salary", "") or ""),
+                "salary_period": _detect_salary_period(j.get("salary", "") or "", j),
+                "job_type": j.get("job_type", "") or "",
+                "source": "remotive",
             }
             for j in jobs[:PER_PAGE]
         ]
@@ -238,6 +328,7 @@ class JobsClient:
     def _shape(job: dict) -> dict:
         title = job.get("title", "") or ""
         desc = job.get("description", "") or ""
+        salary_raw = _format_adzuna_salary(job.get("salary_min"), job.get("salary_max"))
         return {
             "title": title,
             "company": (job.get("company") or {}).get("display_name", ""),
@@ -245,4 +336,12 @@ class JobsClient:
             "source_url": job.get("redirect_url", ""),
             "location": (job.get("location") or {}).get("display_name", ""),
             "is_remote": "remote" in f"{title} {desc}".lower(),
+            "posted_at": _parse_date(job.get("created", "")),
+            "salary_raw": salary_raw,
+            "salary_min": job.get("salary_min"),  # Adzuna already gives this as a number
+            "salary_max": job.get("salary_max"),  # Adzuna already gives this as a number
+            "currency": "USD",  # Adzuna doesn't provide currency, default to USD
+            "salary_period": "annual",  # Adzuna defaults to annual
+            "job_type": (job.get("contract_time") or job.get("contract_type") or ""),
+            "source": "adzuna",
         }

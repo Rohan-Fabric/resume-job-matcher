@@ -47,20 +47,7 @@ class ResumeMatchService:
 
         # 2. find jobs from the internet using the profile
         found = self.jobs.search(profile_data)
-        rows = [
-            JobMatch(
-                resume=resume,
-                title=j["title"],
-                company=j.get("company", ""),
-                jd_text=j.get("jd_text", ""),
-                source_url=j.get("source_url", ""),
-                is_remote=j.get("is_remote", False),
-                location=j.get("location", ""),
-                country=j.get("country", ""),
-                tier=j.get("tier", 4),
-            )
-            for j in found
-        ]
+        rows = [self._build_job_row(resume, j) for j in found]
         self.job_repo.bulk_create(rows)
         # Jobs are saved UNSCORED. The client scores them in batches via
         # score_pending(), so cards appear immediately and fill in live instead
@@ -75,12 +62,18 @@ class ResumeMatchService:
         location: str | None = None,
         work_type: str = "hybrid",
         replace: bool = False,
+        role: str | None = None,
     ):
         """Fetch jobs for an existing resume with a work-type preference.
 
         work_type: "remote" (anywhere, city ignored), "onsite" (city only),
         or "hybrid" (both). replace=True clears prior matches first (a fresh
-        search); replace=False appends, skipping any we already have."""
+        search); replace=False appends, skipping any we already have.
+
+        `role` overrides the resume's detected title for this search only — the
+        resume is never re-parsed, so scoring still uses the original resume text.
+        If provided, it's also saved as the profile's search_role for session
+        persistence."""
         resume = self.resume_repo.get(resume_id)
         if resume is None or not hasattr(resume, "profile"):
             return None
@@ -90,8 +83,21 @@ class ResumeMatchService:
 
         p = resume.profile
         city = "" if work_type == "remote" else (location or p.location)
+        
+        # Use role override if provided, otherwise use profile's search_role if set,
+        # otherwise fall back to detected titles
+        if role and role.strip():
+            search_titles = [role.strip()]
+            # Save the override as the profile's search_role for session persistence
+            p.search_role = role.strip()
+            p.save(update_fields=["search_role"])
+        elif p.search_role:
+            search_titles = [p.search_role]
+        else:
+            search_titles = p.titles
+        
         profile = {
-            "titles": p.titles,
+            "titles": search_titles,
             "skills": p.skills,
             "location": city,
             "country": p.country,
@@ -123,22 +129,31 @@ class ResumeMatchService:
         }
         fresh = [j for j in found if j["source_url"] and j["source_url"] not in seen]
 
-        rows = [
-            JobMatch(
-                resume=resume,
-                title=j["title"],
-                company=j.get("company", ""),
-                jd_text=j.get("jd_text", ""),
-                source_url=j.get("source_url", ""),
-                is_remote=j.get("is_remote", False),
-                location=j.get("location", ""),
-                country=j.get("country", ""),
-                tier=j.get("tier", 4),
-            )
-            for j in fresh
-        ]
+        rows = [self._build_job_row(resume, j) for j in fresh]
         self.job_repo.bulk_create(rows)  # unscored — scored progressively via score_pending()
         return resume
+
+    @staticmethod
+    def _build_job_row(resume, j: dict) -> JobMatch:
+        return JobMatch(
+            resume=resume,
+            title=j["title"],
+            company=j.get("company", ""),
+            jd_text=j.get("jd_text", ""),
+            source_url=j.get("source_url", ""),
+            is_remote=j.get("is_remote", False),
+            location=j.get("location", ""),
+            country=j.get("country", ""),
+            tier=j.get("tier", 4),
+            posted_at=j.get("posted_at"),
+            salary_raw=j.get("salary_raw", ""),
+            salary_min=j.get("salary_min"),
+            salary_max=j.get("salary_max"),
+            currency=j.get("currency", ""),
+            salary_period=j.get("salary_period", ""),
+            job_type=j.get("job_type", ""),
+            source=j.get("source", ""),
+        )
 
     def score_pending(self, *, resume_id: int, batch: int = 8):
         """Score up to `batch` not-yet-scored jobs for this resume, in parallel.
@@ -160,11 +175,23 @@ class ResumeMatchService:
                 scored = list(pool.map(_score, pending))
             for pk, verdict in scored:
                 self.job_repo.set_score(
-                    pk, fit_score=verdict["score"], reasoning=verdict["reasoning"]
+                    pk, fit_score=verdict["score"], reasoning=verdict["reasoning"],
+                    experience_fit=verdict.get("experience_fit", ""),
+                    one_line_summary=verdict.get("one_line_summary", ""),
+                    matched_skills=verdict.get("matched_skills"),
+                    missing_skills=verdict.get("missing_skills"),
                 )
 
         remaining = self.job_repo.pending_for_resume(resume_id).count()
         return resume, remaining
+
+    def filtered_matches(self, *, resume_id: int, **filters):
+        """Same resume's saved jobs, narrowed server-side — no re-fetch from the
+        job APIs, just a different query against what's already stored."""
+        resume = self.resume_repo.get(resume_id)
+        if resume is None:
+            return None
+        return resume, self.job_repo.for_resume_filtered(resume_id, **filters)
 
     def tailor_for_job(self, *, job_id: int) -> tuple[dict, str] | None:
         """Download flow (Option B): tailor the resume for one job, on demand.

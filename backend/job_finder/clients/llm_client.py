@@ -260,7 +260,11 @@ Respond ONLY with JSON, no other text:
         }
 
     def score(self, resume_text: str, jd_text: str) -> dict:
-        """resume + JD → {score: 0-10, reasoning}."""
+        """resume + JD → {score, reasoning, experience_fit, one_line_summary, matched_skills, missing_skills}.
+
+        One call, one extended schema — skills/fit ride along with the existing
+        score request rather than a second LLM round-trip per job.
+        """
         prompt = f"""Job description:
 {jd_text}
 
@@ -268,15 +272,28 @@ Candidate resume:
 {resume_text}
 
 Score this candidate's fit from 0-10 and give a 2-sentence reason.
+Also give: experience_fit (one short phrase, e.g. "Good fit" / "Underqualified" /
+"Overqualified"), one_line_summary (one concise sentence summarizing the match quality),
+matched_skills (skill names from the JD the candidate already has,
+deduplicated, no duplicates with missing_skills), missing_skills (skill names the JD
+wants that the candidate's resume doesn't show). Skill names only, no sentences. Keep
+both lists short (max 6 each).
 Respond ONLY with JSON, no other text:
-{{"score": 0, "reasoning": ""}}"""
+{{"score": 0, "reasoning": "", "experience_fit": "", "one_line_summary": "", "matched_skills": [], "missing_skills": []}}"""
         try:
             raw = _parse_json(_complete(prompt))
         except (json.JSONDecodeError, Exception):
             raw = {}
         # always return a safe, fully-typed shape — a bad reply must never crash
         # the scoring loop (KeyError) or the DB write (string into a FloatField).
-        return {"score": _clamp_score(raw.get("score")), "reasoning": _str(raw.get("reasoning"))}
+        return {
+            "score": _clamp_score(raw.get("score")),
+            "reasoning": _str(raw.get("reasoning")),
+            "experience_fit": _str(raw.get("experience_fit"))[:32],
+            "one_line_summary": _str(raw.get("one_line_summary"))[:128],
+            "matched_skills": _str_list(raw.get("matched_skills"))[:6],
+            "missing_skills": _str_list(raw.get("missing_skills"))[:6],
+        }
 
     def tailor_resume(self, resume_text: str, jd_text: str) -> dict:
         """resume + JD → STRUCTURED resume tailored to the job (our template renders it)."""

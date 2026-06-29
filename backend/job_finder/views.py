@@ -9,6 +9,7 @@ from .pdf_render import render_resume_pdf
 from .pdf_text import extract_text
 from .repositories import ResumeRepository
 from .serializers import (
+    JobMatchOutputSerializer,
     ResumeOutputSerializer,
     ResumeUploadInputSerializer,
 )
@@ -51,30 +52,63 @@ class ResumeViewSet(ViewSet):
             ResumeOutputSerializer(resume).data, status=status.HTTP_201_CREATED
         )
 
+    @staticmethod
+    def _filter_kwargs(q) -> dict | None:
+        """Parsed filter kwargs for filtered_matches(), or None if no filter is active.
+        Shared by retrieve() and score() so a live scoring poll can't clobber an
+        active filter with the full unfiltered list."""
+        if not any(q.get(k) for k in ("posted_within", "job_type", "min_salary", "remote", "source")):
+            return None
+        remote = q.get("remote")
+        return dict(
+            posted_within=int(q["posted_within"]) if q.get("posted_within") else None,
+            job_type=q["job_type"].split(",") if q.get("job_type") else None,
+            min_salary=float(q["min_salary"]) if q.get("min_salary") else None,
+            remote={"true": True, "false": False}.get(remote) if remote else None,
+            source=q["source"].split(",") if q.get("source") else None,
+        )
+
     def retrieve(self, request, pk=None):
+        """GET /api/v1/resumes/{id}/?posted_within=7&job_type=full_time,contract
+        &min_salary=50000&remote=true&source=adzuna,remotive
+
+        Filter params narrow the already-saved matches server-side — no new
+        job-search API call, just a different query. Omit a param to leave
+        that dimension unfiltered (e.g. jobs with unknown salary still show
+        unless min_salary is set)."""
         resume = ResumeRepository().get(int(pk))
         if resume is None:
             return Response(status=status.HTTP_404_NOT_FOUND)
-        return Response(ResumeOutputSerializer(resume).data)
+
+        data = ResumeOutputSerializer(resume).data
+        kwargs = self._filter_kwargs(request.query_params)
+        if kwargs is not None:
+            _, filtered = ResumeMatchService().filtered_matches(resume_id=int(pk), **kwargs)
+            data["matches"] = JobMatchOutputSerializer(filtered, many=True).data
+        return Response(data)
 
     @action(detail=True, methods=["post"])
     def more(self, request, pk=None):
         """POST /api/v1/resumes/{id}/more/ → fetch + score jobs (deduped).
 
         Body (all optional): {"page": 2, "location": "Bhopal",
-        "work_type": "remote|onsite|hybrid", "replace": true}.
+        "work_type": "remote|onsite|hybrid", "replace": true, "role": "Backend Engineer"}.
         replace=true clears prior matches (fresh search); else appends.
+        role overrides the resume's detected title for this search only — the
+        resume itself is never re-parsed.
         """
         page = int(request.data.get("page") or 2)
         location = request.data.get("location") or None
         work_type = request.data.get("work_type") or "hybrid"
         replace = bool(request.data.get("replace"))
+        role = request.data.get("role") or None
         resume = ResumeMatchService().find_more_jobs(
             resume_id=int(pk),
             page=page,
             location=location,
             work_type=work_type,
             replace=replace,
+            role=role,
         )
         if resume is None:
             return Response(status=status.HTTP_404_NOT_FOUND)
@@ -84,14 +118,27 @@ class ResumeViewSet(ViewSet):
     def score(self, request, pk=None):
         """POST /api/v1/resumes/{id}/score/ → score the next batch of unscored
         jobs so the client can fill cards in live. Returns the resume plus
-        {remaining, done}; call repeatedly until done is true."""
+        {remaining, done}; call repeatedly until done is true.
+
+        Scoring always runs over every pending job regardless of filters (a
+        filtered-out job still needs to get scored eventually) — but accepts
+        the same filter params as GET retrieve() so the matches in THIS
+        response stay narrowed; otherwise a live poll would overwrite an
+        active filter with the full unfiltered list mid-poll."""
         batch = int(request.data.get("batch") or 8)
         result = ResumeMatchService().score_pending(resume_id=int(pk), batch=batch)
         if result is None:
             return Response(status=status.HTTP_404_NOT_FOUND)
         resume, remaining = result
+
+        resume_data = ResumeOutputSerializer(resume).data
+        kwargs = self._filter_kwargs(request.data)
+        if kwargs is not None:
+            _, filtered = ResumeMatchService().filtered_matches(resume_id=int(pk), **kwargs)
+            resume_data["matches"] = JobMatchOutputSerializer(filtered, many=True).data
+
         return Response({
-            "resume": ResumeOutputSerializer(resume).data,
+            "resume": resume_data,
             "remaining": remaining,
             "done": remaining == 0,
         })

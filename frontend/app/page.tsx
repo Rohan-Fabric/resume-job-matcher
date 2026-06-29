@@ -2,14 +2,22 @@
 
 import { useRef, useState } from "react";
 import { flushSync } from "react-dom";
-import { uploadResume, tailorForJob, loadMoreJobs, scoreBatch } from "./lib/api";
-import type { JobMatch, Resume } from "./lib/types";
+import {
+  uploadResume,
+  tailorForJob,
+  loadMoreJobs,
+  scoreBatch,
+  fetchFilteredResume,
+} from "./lib/api";
+import type { JobFilters, JobMatch, Resume } from "./lib/types";
+import { Search, MapPin } from "lucide-react";
 import { UploadCard } from "./components/UploadCard";
 import { ProcessingPipeline } from "./components/ProcessingPipeline";
 import { ProfileSummary } from "./components/ProfileSummary";
 import { JobCard } from "./components/JobCard";
 import { TailoringOverlay } from "./components/TailoringOverlay";
 import { HowItWorks } from "./components/HowItWorks";
+import { FilterBar } from "./components/FilterBar";
 
 type Phase = "idle" | "processing" | "results" | "error";
 
@@ -39,6 +47,49 @@ export default function Home() {
     loc: "",
     type: "hybrid",
   });
+  // Editable search role. `roleQuery` is the live text in the search box;
+  // `appliedRole` is the role that produced the CURRENT list (so load-more
+  // continues with it). Both default to the backend-persisted search_role,
+  // else the resume's detected role. The resume is never re-parsed when this
+  // changes — only the job-search query does.
+  const [roleQuery, setRoleQuery] = useState("");
+  const [appliedRole, setAppliedRole] = useState("");
+  // Re-sync from the backend exactly once per resume — React's own pattern for
+  // "reset derived state when a prop changes": setState during render, guarded
+  // by comparing against the last-seen id, so it never fights a later user edit
+  // and never loops (undefined-normalized so it can't spin on a null vs undefined).
+  const [syncedResumeId, setSyncedResumeId] = useState<number | null>(null);
+  const currentResumeId = resume?.id ?? null;
+  if (currentResumeId !== syncedResumeId) {
+    setSyncedResumeId(currentResumeId);
+    const initial = resume?.profile?.search_role || resume?.profile?.titles?.[0] || "";
+    setRoleQuery(initial);
+    setAppliedRole(initial);
+  }
+
+  // Track if a view transition is in progress
+  const transitionInProgress = useRef(false);
+
+  // server-side result filters — re-fetch narrows the SAVED matches, no new job-search call
+  const [filters, setFilters] = useState<JobFilters>({});
+  const [filtering, setFiltering] = useState(false);
+  // live-scoring's poll loop reads this so an in-flight loop picks up filter
+  // changes immediately, instead of a stale value captured when it started
+  const filtersRef = useRef<JobFilters>({});
+  filtersRef.current = filters;
+
+  async function applyFilters(next: JobFilters) {
+    setFilters(next);
+    if (!resume) return;
+    setFiltering(true);
+    try {
+      setResume(await fetchFilteredResume(resume.id, next));
+    } catch (e) {
+      console.error("filter fetch failed", e);
+    } finally {
+      setFiltering(false);
+    }
+  }
 
   async function handleUpload(file: File) {
     setPhase("processing");
@@ -65,13 +116,44 @@ export default function Home() {
   // positions as scores land (falls back to an instant update where unsupported).
   function animateTo(next: Resume) {
     const doc = document as Document & {
-      startViewTransition?: (cb: () => void) => void;
+      startViewTransition?: (cb: () => void) => {
+        ready: Promise<void>;
+        finished: Promise<void>;
+        updateCallbackDone: Promise<void>;
+      };
     };
-    if (doc.startViewTransition) {
-      doc.startViewTransition(() => flushSync(() => setResume(next)));
-    } else {
+
+    // No support, or one's already running → update directly (never overlap two
+    // transitions; the second would abort the first and reject its promises).
+    if (!doc.startViewTransition || transitionInProgress.current) {
       setResume(next);
+      return;
     }
+
+    transitionInProgress.current = true;
+    let transition;
+    try {
+      // flushSync forces the DOM to update synchronously inside this callback —
+      // the View Transition API snapshots before/after state around it; without
+      // it React's batched setState leaves the DOM stale when the browser takes
+      // its "after" snapshot, which throws InvalidStateError.
+      transition = doc.startViewTransition(() => flushSync(() => setResume(next)));
+    } catch {
+      transitionInProgress.current = false;
+      setResume(next);
+      return;
+    }
+
+    // An aborted/skipped transition rejects ALL of ready/finished/updateCallbackDone
+    // with InvalidStateError. Swallow every one — an unhandled rejection on any of
+    // them is what Next's dev overlay surfaces as a runtime error. The DOM update
+    // already ran synchronously in the callback, so a lost animation is cosmetic.
+    const ignore = () => {};
+    transition.ready.catch(ignore);
+    transition.updateCallbackDone.catch(ignore);
+    transition.finished.catch(ignore).finally(() => {
+      transitionInProgress.current = false;
+    });
   }
 
   // Score not-yet-scored jobs in batches until none remain, updating live.
@@ -82,7 +164,7 @@ export default function Home() {
     try {
       let done = false;
       while (!done) {
-        const res = await scoreBatch(resumeId);
+        const res = await scoreBatch(resumeId, 8, filtersRef.current);
         if (scoringRef.current !== resumeId) return; // superseded by a newer search
         animateTo(res.resume);
         done = res.done;
@@ -125,8 +207,11 @@ export default function Home() {
     }
   }
 
-  // Fresh search with preferences — clears the current list, shows only new.
-  async function runSearch() {
+  // Fresh search — clears the current list, shows only new. `roleOverride`
+  // lets the "reset to detected" link search a specific role without waiting
+  // for roleQuery state to flush; otherwise the live search-box value is used.
+  // The resume is never re-parsed — only the job-search query changes.
+  async function runSearch(roleOverride?: string) {
     if (!resume) return;
     // onsite/hybrid need a city; remote ignores it
     if (workType !== "remote" && !loc.trim()) {
@@ -136,15 +221,20 @@ export default function Home() {
     setFilterErr("");
     setSearching(true);
     const useLoc = workType === "remote" ? "" : loc.trim();
+    const useRole = (roleOverride ?? roleQuery).trim();
     try {
       const data = await loadMoreJobs(resume.id, 1, {
         location: useLoc,
         workType,
         replace: true,
+        role: useRole || undefined,
       });
       setResume(data);
       setPage(1);
       setApplied({ loc: useLoc, type: workType });
+      setAppliedRole(useRole);
+      if (roleOverride) setRoleQuery(roleOverride);
+      setFilters({}); // a fresh search resets any active result filters
       runScoring(data.id);
     } catch (e) {
       console.error("search failed", e);
@@ -163,6 +253,7 @@ export default function Home() {
         location: applied.loc || undefined,
         workType: applied.type,
         replace: false,
+        role: appliedRole || undefined,
       });
       setResume(data);
       setPage(next);
@@ -185,6 +276,9 @@ export default function Home() {
     setWorkType("hybrid");
     setFilterErr("");
     setApplied({ loc: "", type: "hybrid" });
+    setRoleQuery("");
+    setAppliedRole("");
+    setFilters({});
   }
 
   const matches = resume?.matches ?? [];
@@ -193,23 +287,24 @@ export default function Home() {
     (a, b) => (b.fit_score ?? -1) - (a.fit_score ?? -1),
   );
   const scoredCount = matches.filter((m) => m.fit_score != null).length;
+  const detectedRole = resume?.profile?.titles?.[0] ?? "";
+  const roleOverridden =
+    roleQuery.trim() !== "" && roleQuery.trim() !== detectedRole;
 
   return (
     <div className="hero-glow">
-      <div className="mx-auto max-w-7xl px-6 py-20 sm:py-28">
+      <div className="px-6 py-20 sm:py-28 lg:px-8">
         {phase === "results" && resume ? (
           /* ── Results ── */
-          <div className="fade-up">
-            <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
+          <div className="fade-up mx-auto max-w-[1680px]">
+            <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
               <div>
                 <h2 className="font-display text-4xl text-ink">Your matches</h2>
                 <p className="mt-1 text-sm text-muted">
                   {scoring
                     ? `Scoring ${scoredCount} of ${sorted.length} matches…`
                     : `${sorted.length} ${sorted.length === 1 ? "role" : "roles"} ranked by fit`}
-                  {resume.profile?.titles?.[0]
-                    ? ` · based on your ${resume.profile.titles[0]} profile`
-                    : ""}
+                  {detectedRole ? " · based on your resume" : ""}
                 </p>
               </div>
               <button
@@ -220,67 +315,104 @@ export default function Home() {
               </button>
             </div>
 
-            <div className="grid items-start gap-8 lg:grid-cols-[380px_1fr]">
-              <aside className="lg:sticky lg:top-24">
-                {resume.profile && <ProfileSummary profile={resume.profile} />}
-              </aside>
-
-              <section className="min-w-0">
-                {/* search — work type + city, minimal */}
-                <div className="mb-5">
-                  <div className="flex flex-wrap items-center gap-2">
-                    {/* work-type segmented control */}
-                    <div className="inline-flex rounded-full border border-line bg-bg p-1">
-                      {(["remote", "hybrid", "onsite"] as const).map((t) => (
-                        <button
-                          key={t}
-                          onClick={() => {
-                            setWorkType(t);
-                            setFilterErr("");
-                          }}
-                          className={`rounded-full px-3.5 py-1.5 text-sm capitalize transition-colors ${
-                            workType === t
-                              ? "bg-brand text-white"
-                              : "text-ink-soft hover:text-ink"
-                          }`}
-                        >
-                          {t}
-                        </button>
-                      ))}
-                    </div>
-
-                    {/* city */}
-                    <input
-                      value={loc}
-                      onChange={(e) => {
-                        setLoc(e.target.value);
-                        setFilterErr("");
-                      }}
-                      onKeyDown={(e) => e.key === "Enter" && !searching && runSearch()}
-                      disabled={workType === "remote"}
-                      placeholder={
-                        workType === "remote"
-                          ? "Anywhere · remote"
-                          : `City (e.g. ${resume.profile?.location || "your city"})`
-                      }
-                      className="min-w-[12rem] flex-1 rounded-full border border-line bg-surface px-4 py-2 text-sm text-ink outline-none transition-colors focus:border-brand disabled:opacity-50"
-                    />
-
-                    <button
-                      onClick={runSearch}
-                      disabled={searching}
-                      className="btn-primary rounded-full px-5 py-2 text-sm font-medium text-white disabled:opacity-50 disabled:shadow-none"
-                    >
-                      {searching ? "Searching…" : "Search"}
-                    </button>
-                  </div>
-                  {filterErr && (
-                    <p className="mt-2 px-1 text-xs text-rose">{filterErr}</p>
-                  )}
+            {/* search bar — what (role) · where (city) · work type */}
+            <div className="mb-6 rounded-2xl border border-line bg-surface p-2.5 card-lift">
+              <div className="flex flex-col gap-2.5 lg:flex-row lg:items-center">
+                {/* role */}
+                <div className="flex flex-1 items-center gap-2 rounded-xl bg-bg px-3.5 py-2.5">
+                  <Search className="h-4 w-4 shrink-0 text-muted" />
+                  <input
+                    value={roleQuery}
+                    onChange={(e) => setRoleQuery(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && !searching && runSearch()}
+                    placeholder="Job title or role"
+                    className="w-full bg-transparent text-sm text-ink outline-none placeholder:text-muted"
+                  />
                 </div>
 
-                {/* live loading bar — shows a backend call (search or scoring) is running */}
-                {(searching || loadingMore || scoring) && (
+                {/* city */}
+                <div className="flex items-center gap-2 rounded-xl bg-bg px-3.5 py-2.5 lg:w-60">
+                  <MapPin className="h-4 w-4 shrink-0 text-muted" />
+                  <input
+                    value={loc}
+                    onChange={(e) => {
+                      setLoc(e.target.value);
+                      setFilterErr("");
+                    }}
+                    onKeyDown={(e) => e.key === "Enter" && !searching && runSearch()}
+                    disabled={workType === "remote"}
+                    placeholder={workType === "remote" ? "Anywhere · remote" : "City"}
+                    className="w-full bg-transparent text-sm text-ink outline-none placeholder:text-muted disabled:opacity-50"
+                  />
+                </div>
+
+                {/* work-type segmented control */}
+                <div className="inline-flex rounded-xl border border-line bg-bg p-1">
+                  {(["remote", "hybrid", "onsite"] as const).map((t) => (
+                    <button
+                      key={t}
+                      onClick={() => {
+                        setWorkType(t);
+                        setFilterErr("");
+                      }}
+                      className={`rounded-lg px-3 py-1.5 text-sm capitalize transition-colors ${
+                        workType === t
+                          ? "bg-brand text-white"
+                          : "text-ink-soft hover:text-ink"
+                      }`}
+                    >
+                      {t}
+                    </button>
+                  ))}
+                </div>
+
+                <button
+                  onClick={() => runSearch()}
+                  disabled={searching}
+                  className="btn-primary rounded-xl px-6 py-2.5 text-sm font-medium text-white disabled:opacity-50 disabled:shadow-none"
+                >
+                  {searching ? "Searching…" : "Search"}
+                </button>
+              </div>
+
+              {/* hint / error row */}
+              {(detectedRole || filterErr) && (
+                <div className="flex flex-wrap items-center justify-between gap-2 px-1.5 pt-2">
+                  {detectedRole ? (
+                    roleOverridden ? (
+                      <p className="text-xs text-muted">
+                        Custom role ·{" "}
+                        <button
+                          onClick={() => runSearch(detectedRole)}
+                          className="font-medium text-brand hover:text-brand-ink"
+                        >
+                          reset to “{detectedRole}”
+                        </button>
+                      </p>
+                    ) : (
+                      <p className="text-xs text-muted">
+                        Detected from your resume — edit to search a different role
+                      </p>
+                    )
+                  ) : (
+                    <span />
+                  )}
+                  {filterErr && <p className="text-xs text-rose">{filterErr}</p>}
+                </div>
+              )}
+            </div>
+
+            {/* 3-column: filters · jobs · profile */}
+            <div className="grid grid-cols-1 gap-6 xl:grid-cols-[240px_minmax(0,1fr)_330px]">
+              {/* filters */}
+              <aside className="order-2 h-fit xl:order-1 xl:sticky xl:top-24">
+                <FilterBar filters={filters} onChange={applyFilters} />
+              </aside>
+
+              {/* jobs */}
+              <section className="order-1 min-w-0 xl:order-2">
+                {/* live loading bar — shows a backend call (search/scoring/filter) is running */}
+                {(searching || loadingMore || scoring || filtering) && (
                   <div className="indet-track mb-4 h-1 w-full overflow-hidden rounded-full bg-line">
                     <div className="indet-bar" />
                   </div>
@@ -293,7 +425,7 @@ export default function Home() {
                     </div>
                     <p className="font-medium text-ink">No roles for these filters</p>
                     <p className="mt-1 text-sm text-muted">
-                      Try a different city or work type above.
+                      Try a different role, city, or work type above.
                     </p>
                   </div>
                 ) : (
@@ -326,6 +458,11 @@ export default function Home() {
                   </button>
                 )}
               </section>
+
+              {/* profile */}
+              <aside className="order-3 h-fit xl:sticky xl:top-24">
+                {resume.profile && <ProfileSummary profile={resume.profile} />}
+              </aside>
             </div>
           </div>
         ) : (

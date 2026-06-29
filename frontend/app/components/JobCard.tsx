@@ -35,6 +35,21 @@ function locationLabel(job: JobMatch): string {
   return job.location || job.country?.toUpperCase() || "—";
 }
 
+/** "3d ago" / "2w ago" — null/invalid dates render nothing rather than guess. */
+function postedLabel(postedAt: string | null): string | null {
+  if (!postedAt) return null;
+  const days = Math.floor((Date.now() - new Date(postedAt).getTime()) / 86_400_000);
+  if (Number.isNaN(days) || days < 0) return null;
+  if (days === 0) return "Today";
+  if (days < 7) return `${days}d ago`;
+  if (days < 30) return `${Math.floor(days / 7)}w ago`;
+  return `${Math.floor(days / 30)}mo ago`;
+}
+
+function jobTypeLabel(jobType: string): string {
+  return jobType.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 export function JobCard({ job, rank, tailoring, onTailor }: Props) {
   const tier = tierLabel(job.fit_score);
   const [expanded, setExpanded] = useState(false);
@@ -68,12 +83,37 @@ export function JobCard({ job, rank, tailoring, onTailor }: Props) {
             <span className="rounded-full border border-line px-2 py-0.5 font-medium text-ink-soft">
               {locationLabel(job)}
             </span>
+            {job.job_type && (
+              <span className="rounded-full border border-line px-2 py-0.5 text-ink-soft">
+                {jobTypeLabel(job.job_type)}
+              </span>
+            )}
+            {job.salary_raw && (
+              <span className="rounded-full border border-line px-2 py-0.5 text-ink-soft">
+                {job.salary_raw}
+              </span>
+            )}
+            {postedLabel(job.posted_at) && (
+              <span className="text-muted">{postedLabel(job.posted_at)}</span>
+            )}
           </div>
 
           <h3 className="mt-1.5 text-[15px] font-semibold leading-snug text-ink break-words">
             {job.title}
           </h3>
           <p className="text-sm text-ink-soft break-words">{job.company || "—"}</p>
+
+          {job.experience_fit && (
+            <span className="mt-1.5 inline-block rounded-full bg-brand-wash px-2 py-0.5 text-[11px] font-medium text-brand-ink">
+              {job.experience_fit}
+            </span>
+          )}
+
+          {job.one_line_summary && (
+            <p className="mt-1.5 text-xs text-ink-soft italic">
+              {job.one_line_summary}
+            </p>
+          )}
 
           {job.reasoning ? (
             <div className="mt-2.5">
@@ -91,6 +131,26 @@ export function JobCard({ job, rank, tailoring, onTailor }: Props) {
                 >
                   {expanded ? "Show less" : "Show more"}
                 </button>
+              )}
+              {(job.matched_skills.length > 0 || job.missing_skills.length > 0) && (
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {job.matched_skills.map((s) => (
+                    <span
+                      key={`m-${s}`}
+                      className="rounded-full bg-brand-wash px-2 py-0.5 text-[11px] text-brand-ink"
+                    >
+                      ✓ {s}
+                    </span>
+                  ))}
+                  {job.missing_skills.map((s) => (
+                    <span
+                      key={`x-${s}`}
+                      className="rounded-full bg-rose-wash px-2 py-0.5 text-[11px] text-rose"
+                    >
+                      {s}
+                    </span>
+                  ))}
+                </div>
               )}
             </div>
           ) : job.fit_score == null ? (

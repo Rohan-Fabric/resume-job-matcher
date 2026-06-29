@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 interface Props {
   score: number | null;
@@ -15,13 +15,15 @@ export function ScoreRing({ score }: Props) {
   const c = 2 * Math.PI * r;
 
   const target = score ?? 0;
-  const [shown, setShown] = useState(0);
+  const prefersReduced = typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const [shown, setShown] = useState(prefersReduced ? target : 0);
+  const initializedRef = useRef(false);
 
   useEffect(() => {
     if (score === null || score === undefined) return;
-    // respect reduced-motion: jump straight to the value
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      setShown(target);
+    // respect reduced-motion: jump straight to the value on first render only
+    if (prefersReduced && !initializedRef.current) {
+      initializedRef.current = true;
       return;
     }
     let raf = 0;
@@ -34,7 +36,7 @@ export function ScoreRing({ score }: Props) {
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [score, target]);
+  }, [score, target, prefersReduced]);
 
   // null = not scored yet (the client scores progressively) → pulsing "scoring" ring
   if (score === null || score === undefined) {
