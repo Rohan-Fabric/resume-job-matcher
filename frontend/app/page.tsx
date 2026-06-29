@@ -2,13 +2,7 @@
 
 import { useRef, useState } from "react";
 import { flushSync } from "react-dom";
-import {
-  uploadResume,
-  tailorForJob,
-  loadMoreJobs,
-  scoreBatch,
-  fetchFilteredResume,
-} from "./lib/api";
+import { uploadResume, tailorForJob, loadMoreJobs, scoreBatch } from "./lib/api";
 import type { JobFilters, JobMatch, Resume } from "./lib/types";
 import { Search, MapPin } from "lucide-react";
 import { UploadCard } from "./components/UploadCard";
@@ -20,6 +14,53 @@ import { HowItWorks } from "./components/HowItWorks";
 import { FilterBar } from "./components/FilterBar";
 
 type Phase = "idle" | "processing" | "results" | "error";
+
+// Optimistic client-side filtering. Mirrors the backend repository semantics:
+// an active filter excludes any job missing that value (never shows it silently).
+function passesFilters(job: JobMatch, f: JobFilters): boolean {
+  if (f.remote && !job.is_remote) return false;
+  if (f.jobType?.length && !f.jobType.includes(job.job_type)) return false;
+  if (f.minSalary && !(job.salary_min != null && job.salary_min >= f.minSalary)) return false;
+  if (f.postedWithin) {
+    if (!job.posted_at) return false;
+    const days = (Date.now() - new Date(job.posted_at).getTime()) / 86_400_000;
+    if (Number.isNaN(days) || days > f.postedWithin) return false;
+  }
+  return true;
+}
+
+const titleCase = (s: string) =>
+  s.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+
+// Active filters → removable chip descriptors (label + the next filter state
+// once removed), so the results column shows what's narrowing it.
+function activeChips(
+  f: JobFilters,
+): { key: string; label: string; next: JobFilters }[] {
+  const chips: { key: string; label: string; next: JobFilters }[] = [];
+  if (f.postedWithin) {
+    const label = { 1: "Last 24 hours", 7: "Last 7 days", 30: "Last 30 days" }[f.postedWithin];
+    chips.push({ key: "posted", label, next: { ...f, postedWithin: undefined } });
+  }
+  for (const t of f.jobType ?? []) {
+    chips.push({
+      key: `type-${t}`,
+      label: titleCase(t),
+      next: { ...f, jobType: (f.jobType ?? []).filter((x) => x !== t) || undefined },
+    });
+  }
+  if (f.minSalary) {
+    chips.push({
+      key: "salary",
+      label: `≥ ${f.minSalary.toLocaleString()}`,
+      next: { ...f, minSalary: undefined },
+    });
+  }
+  if (f.remote) {
+    chips.push({ key: "remote", label: "Remote only", next: { ...f, remote: undefined } });
+  }
+  return chips;
+}
 
 export default function Home() {
   const [phase, setPhase] = useState<Phase>("idle");
@@ -70,26 +111,11 @@ export default function Home() {
   // Track if a view transition is in progress
   const transitionInProgress = useRef(false);
 
-  // server-side result filters — re-fetch narrows the SAVED matches, no new job-search call
+  // Result filters are applied OPTIMISTICALLY, client-side: every match (≤25)
+  // already lives in memory, so filtering is a pure render-time derivation —
+  // zero latency, no round-trip, and no way for a background scoring poll to
+  // clobber the view. `resume.matches` always stays the full set.
   const [filters, setFilters] = useState<JobFilters>({});
-  const [filtering, setFiltering] = useState(false);
-  // live-scoring's poll loop reads this so an in-flight loop picks up filter
-  // changes immediately, instead of a stale value captured when it started
-  const filtersRef = useRef<JobFilters>({});
-  filtersRef.current = filters;
-
-  async function applyFilters(next: JobFilters) {
-    setFilters(next);
-    if (!resume) return;
-    setFiltering(true);
-    try {
-      setResume(await fetchFilteredResume(resume.id, next));
-    } catch (e) {
-      console.error("filter fetch failed", e);
-    } finally {
-      setFiltering(false);
-    }
-  }
 
   async function handleUpload(file: File) {
     setPhase("processing");
@@ -164,7 +190,7 @@ export default function Home() {
     try {
       let done = false;
       while (!done) {
-        const res = await scoreBatch(resumeId, 8, filtersRef.current);
+        const res = await scoreBatch(resumeId);
         if (scoringRef.current !== resumeId) return; // superseded by a newer search
         animateTo(res.resume);
         done = res.done;
@@ -286,7 +312,11 @@ export default function Home() {
   const sorted = [...matches].sort(
     (a, b) => (b.fit_score ?? -1) - (a.fit_score ?? -1),
   );
-  const scoredCount = matches.filter((m) => m.fit_score != null).length;
+  // client-side filter (mirrors the backend's semantics: a job with no value
+  // for an active filter is excluded, never silently shown)
+  const visible = sorted.filter((j) => passesFilters(j, filters));
+  const chips = activeChips(filters);
+  const scoredCount = visible.filter((m) => m.fit_score != null).length;
   const detectedRole = resume?.profile?.titles?.[0] ?? "";
   const roleOverridden =
     roleQuery.trim() !== "" && roleQuery.trim() !== detectedRole;
@@ -302,8 +332,8 @@ export default function Home() {
                 <h2 className="font-display text-4xl text-ink">Your matches</h2>
                 <p className="mt-1 text-sm text-muted">
                   {scoring
-                    ? `Scoring ${scoredCount} of ${sorted.length} matches…`
-                    : `${sorted.length} ${sorted.length === 1 ? "role" : "roles"} ranked by fit`}
+                    ? `Scoring ${scoredCount} of ${visible.length} matches…`
+                    : `${visible.length} ${visible.length === 1 ? "role" : "roles"}${chips.length ? " match your filters" : " ranked by fit"}`}
                   {detectedRole ? " · based on your resume" : ""}
                 </p>
               </div>
@@ -406,31 +436,55 @@ export default function Home() {
             <div className="grid grid-cols-1 gap-6 xl:grid-cols-[240px_minmax(0,1fr)_330px]">
               {/* filters */}
               <aside className="order-2 h-fit xl:order-1 xl:sticky xl:top-24">
-                <FilterBar filters={filters} onChange={applyFilters} />
+                <FilterBar filters={filters} onChange={setFilters} />
               </aside>
 
               {/* jobs */}
               <section className="order-1 min-w-0 xl:order-2">
-                {/* live loading bar — shows a backend call (search/scoring/filter) is running */}
-                {(searching || loadingMore || scoring || filtering) && (
+                {/* live loading bar — search/scoring only (filters are instant) */}
+                {(searching || loadingMore || scoring) && (
                   <div className="indet-track mb-4 h-1 w-full overflow-hidden rounded-full bg-line">
                     <div className="indet-bar" />
                   </div>
                 )}
 
-                {sorted.length === 0 ? (
+                {/* active filter chips — remove one with a click */}
+                {chips.length > 0 && (
+                  <div className="mb-4 flex flex-wrap items-center gap-2">
+                    {chips.map((c) => (
+                      <button
+                        key={c.key}
+                        onClick={() => setFilters(c.next)}
+                        className="inline-flex items-center gap-1.5 rounded-full bg-brand-wash px-3 py-1 text-xs font-medium text-brand-ink transition-colors hover:bg-brand hover:text-white"
+                      >
+                        {c.label}
+                        <span aria-hidden>✕</span>
+                      </button>
+                    ))}
+                    <button
+                      onClick={() => setFilters({})}
+                      className="text-xs font-medium text-muted transition-colors hover:text-ink"
+                    >
+                      Clear all
+                    </button>
+                  </div>
+                )}
+
+                {visible.length === 0 ? (
                   <div className="rounded-2xl border border-line bg-surface p-12 text-center card-lift">
                     <div className="mx-auto mb-3 grid h-12 w-12 place-items-center rounded-full bg-bg text-xl">
                       🔍
                     </div>
-                    <p className="font-medium text-ink">No roles for these filters</p>
+                    <p className="font-medium text-ink">No roles match these filters</p>
                     <p className="mt-1 text-sm text-muted">
-                      Try a different role, city, or work type above.
+                      {chips.length > 0
+                        ? "Loosen a filter, or start a new search above."
+                        : "Try a different role, city, or work type above."}
                     </p>
                   </div>
                 ) : (
                   <div className="space-y-3.5">
-                    {sorted.map((job, i) => (
+                    {visible.map((job, i) => (
                       <div
                         key={job.id}
                         className="fade-up"
@@ -438,7 +492,6 @@ export default function Home() {
                       >
                         <JobCard
                           job={job}
-                          rank={i + 1}
                           tailoring={tailorLoading && activeJob?.id === job.id}
                           onTailor={handleTailor}
                         />
@@ -448,7 +501,7 @@ export default function Home() {
                 )}
 
                 {/* load more — same prefs, skipping jobs already shown */}
-                {sorted.length > 0 && (
+                {visible.length > 0 && (
                   <button
                     onClick={handleMore}
                     disabled={loadingMore}
