@@ -161,14 +161,16 @@ def _is_real_city(location: str, home: str) -> bool:
 
 
 class JobsClient:
-    def search(self, profile: dict, page: int = 1, remote: bool = False) -> list[dict]:
+    def search(self, profile: dict, page: int = 1, remote: bool = False, include_skills: bool = True) -> list[dict]:
         """profile → list of job dicts, each tagged with country + tier.
 
         `page` advances the result page across sources, so "load more" fetches
         fresh listings instead of the same first page again.
 
         `remote` biases every source's query toward remote roles, so the home
-        country's remote jobs surface too (not just US-centric remote boards)."""
+        country's remote jobs surface too (not just US-centric remote boards).
+
+        `include_skills` when False, searches only on role (ignores candidate skills)."""
         if not settings.ADZUNA_APP_ID or not settings.ADZUNA_APP_KEY:
             return []
 
@@ -181,6 +183,10 @@ class JobsClient:
         # nothing to search on → no point hitting the APIs with an empty query
         if not role and not skill_terms:
             return []
+
+        # When include_skills=False, search only on role (ignore skills)
+        if not include_skills:
+            skill_terms = ""
 
         home = (profile.get("country") or "in").lower()
         if home not in ADZUNA_COUNTRIES:

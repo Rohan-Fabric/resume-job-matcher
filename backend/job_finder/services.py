@@ -102,7 +102,10 @@ class ResumeMatchService:
             "location": city,
             "country": p.country,
         }
-        found = self.jobs.search(profile, page=page, remote=(work_type == "remote"))
+        # When user provides a custom role, search only on that role (ignore skills)
+        # to avoid irrelevant matches (e.g., searching "sales" but getting software engineer jobs)
+        include_skills = not (role and role.strip())
+        found = self.jobs.search(profile, page=page, remote=(work_type == "remote"), include_skills=include_skills)
 
         # work-type + location-scope filter. onsite/hybrid stay in the candidate's
         # country (so a Bangalore search never surfaces US onsite roles); remote
@@ -192,6 +195,26 @@ class ResumeMatchService:
         if resume is None:
             return None
         return resume, self.job_repo.for_resume_filtered(resume_id, **filters)
+
+    def explain_job_match(self, *, job_id: int, resume_id: int | None = None):
+        """Compute reasoning, experience_fit, matched/missing skills on demand when user clicks 'Why this match'."""
+        job = self.job_repo.get(job_id)
+        if not job:
+            return None
+        resume_id = resume_id or job.resume_id
+        resume = self.resume_repo.get(resume_id)
+        if not resume or job.resume_id != resume_id:
+            return None
+        if job.reasoning and job.matched_skills:
+            return job  # already explained
+        verdict = self.llm.explain_match(resume.raw_text, job.jd_text)
+        return self.job_repo.update_explanation(
+            job_id,
+            reasoning=verdict["reasoning"],
+            experience_fit=verdict["experience_fit"],
+            matched_skills=verdict["matched_skills"],
+            missing_skills=verdict["missing_skills"],
+        )
 
     def tailor_for_job(self, *, job_id: int) -> tuple[dict, str] | None:
         """Download flow (Option B): tailor the resume for one job, on demand.

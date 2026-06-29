@@ -3,12 +3,14 @@
 import { useState } from "react";
 import { ChevronDown } from "lucide-react";
 import type { JobMatch } from "../lib/types";
+import { explainJobMatch } from "../lib/api";
 import { ScoreRing } from "./ScoreRing";
 
 interface Props {
   job: JobMatch;
   tailoring: boolean;
   onTailor: (job: JobMatch) => void;
+  onUpdateJob?: (job: JobMatch) => void;
 }
 
 /** Accent colour for the card's left strip — mirrors the score-ring tiers.
@@ -44,8 +46,9 @@ function jobTypeLabel(jobType: string): string {
   return jobType.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-export function JobCard({ job, tailoring, onTailor }: Props) {
+export function JobCard({ job, tailoring, onTailor, onUpdateJob }: Props) {
   const [expanded, setExpanded] = useState(false);
+  const [explaining, setExplaining] = useState(false);
 
   const matched = job.matched_skills.length;
   const total = matched + job.missing_skills.length;
@@ -60,7 +63,24 @@ export function JobCard({ job, tailoring, onTailor }: Props) {
     .join(" · ");
   // resting summary: prefer the one-liner, fall back to the full reasoning
   const summary = job.one_line_summary || job.reasoning;
-  const hasDetail = !!(job.reasoning || job.experience_fit || total > 0);
+  const canExplain = job.fit_score != null || !!(job.reasoning || job.experience_fit || total > 0);
+
+  async function handleToggleExplain() {
+    if (!expanded && !job.reasoning && !explaining) {
+      setExpanded(true);
+      setExplaining(true);
+      try {
+        const updated = await explainJobMatch(job.id);
+        onUpdateJob?.(updated);
+      } catch (e) {
+        console.error("Failed to explain job", e);
+      } finally {
+        setExplaining(false);
+      }
+    } else {
+      setExpanded(!expanded);
+    }
+  }
 
   return (
     <article className="group card-interactive relative overflow-hidden rounded-2xl border border-line bg-surface p-5">
@@ -127,12 +147,12 @@ export function JobCard({ job, tailoring, onTailor }: Props) {
               )}
             </button>
 
-            {hasDetail && (
+            {canExplain && (
               <button
-                onClick={() => setExpanded((v) => !v)}
+                onClick={handleToggleExplain}
                 className="ml-auto inline-flex items-center gap-1 text-xs font-medium text-brand transition-colors hover:text-brand-ink"
               >
-                Why this match
+                {explaining ? "Analyzing…" : "Why this match"}
                 <ChevronDown
                   className={`h-3.5 w-3.5 transition-transform ${expanded ? "rotate-180" : ""}`}
                 />
@@ -141,38 +161,48 @@ export function JobCard({ job, tailoring, onTailor }: Props) {
           </div>
 
           {/* expanded detail — reasoning, experience fit, skill gap */}
-          {expanded && hasDetail && (
+          {expanded && canExplain && (
             <div className="fade-up mt-3 rounded-xl bg-bg p-3.5">
-              {job.experience_fit && (
-                <p className="text-xs">
-                  <span className="text-muted">Experience fit: </span>
-                  <span className="font-medium text-ink">{job.experience_fit}</span>
-                </p>
-              )}
-              {job.reasoning && (
-                <p className="mt-1.5 text-sm leading-relaxed text-ink-soft break-words">
-                  {job.reasoning}
-                </p>
-              )}
-              {total > 0 && (
-                <div className="mt-3 flex flex-wrap gap-1.5">
-                  {job.matched_skills.map((s) => (
-                    <span
-                      key={`m-${s}`}
-                      className="rounded-full bg-brand-wash px-2 py-0.5 text-[11px] text-brand-ink"
-                    >
-                      ✓ {s}
-                    </span>
-                  ))}
-                  {job.missing_skills.map((s) => (
-                    <span
-                      key={`x-${s}`}
-                      className="rounded-full bg-rose-wash px-2 py-0.5 text-[11px] text-rose"
-                    >
-                      {s}
-                    </span>
-                  ))}
+              {explaining ? (
+                <div className="space-y-2.5 py-1" aria-hidden="true">
+                  <div className="skeleton h-3 w-1/3 rounded-full" />
+                  <div className="skeleton h-3 w-full rounded-full" />
+                  <div className="skeleton h-3 w-4/5 rounded-full" />
                 </div>
+              ) : (
+                <>
+                  {job.experience_fit && (
+                    <p className="text-xs">
+                      <span className="text-muted">Experience fit: </span>
+                      <span className="font-medium text-ink">{job.experience_fit}</span>
+                    </p>
+                  )}
+                  {job.reasoning && (
+                    <p className="mt-1.5 text-sm leading-relaxed text-ink-soft break-words">
+                      {job.reasoning}
+                    </p>
+                  )}
+                  {total > 0 && (
+                    <div className="mt-3 flex flex-wrap gap-1.5">
+                      {job.matched_skills.map((s) => (
+                        <span
+                          key={`m-${s}`}
+                          className="rounded-full bg-brand-wash px-2 py-0.5 text-[11px] text-brand-ink"
+                        >
+                          ✓ {s}
+                        </span>
+                      ))}
+                      {job.missing_skills.map((s) => (
+                        <span
+                          key={`x-${s}`}
+                          className="rounded-full bg-rose-wash px-2 py-0.5 text-[11px] text-rose"
+                        >
+                          {s}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </>
               )}
             </div>
           )}

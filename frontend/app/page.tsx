@@ -292,8 +292,17 @@ export default function Home() {
     setFilterErr("");
     setApplied({ loc: "", type: "hybrid" });
     setRoleQuery("");
-    setAppliedRole("");
     setFilters({});
+  }
+
+  function handleUpdateJob(updatedJob: JobMatch) {
+    setResume((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        matches: prev.matches.map((m) => (m.id === updatedJob.id ? updatedJob : m)),
+      };
+    });
   }
 
   const matches = resume?.matches ?? [];
@@ -461,6 +470,7 @@ export default function Home() {
                           job={job}
                           tailoring={tailorLoading && activeJob?.id === job.id}
                           onTailor={handleTailor}
+                          onUpdateJob={handleUpdateJob}
                         />
                       </div>
                     ))}
@@ -481,7 +491,7 @@ export default function Home() {
 
               {/* profile */}
               <aside className="order-3 h-fit xl:sticky xl:top-24">
-                {resume.profile && <ProfileSummary profile={resume.profile} />}
+                {resume.profile && <ProfileSummary profile={resume.profile} matches={resume.matches} />}
               </aside>
             </div>
           </div>

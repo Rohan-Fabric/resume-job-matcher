@@ -145,7 +145,16 @@ class ResumeViewSet(ViewSet):
 
 
 class JobMatchViewSet(ViewSet):
-    """POST /api/v1/matches/{id}/tailor/ → tailored resume as a PDF download."""
+    """POST /api/v1/matches/{id}/tailor/ → tailored resume as a PDF download.
+    POST /api/v1/matches/{id}/explain/ → detailed reasoning & skill gaps.
+    """
+
+    @action(detail=True, methods=["post"])
+    def explain(self, request, pk=None):
+        job = ResumeMatchService().explain_job_match(job_id=int(pk))
+        if job is None:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        return Response(JobMatchOutputSerializer(job).data)
 
     @action(detail=True, methods=["post"])
     def tailor(self, request, pk=None):

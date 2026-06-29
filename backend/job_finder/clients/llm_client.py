@@ -260,37 +260,51 @@ Respond ONLY with JSON, no other text:
         }
 
     def score(self, resume_text: str, jd_text: str) -> dict:
-        """resume + JD → {score, reasoning, experience_fit, one_line_summary, matched_skills, missing_skills}.
+        """Lightweight scoring: resume + JD → {score, one_line_summary}.
+        Fast evaluation so card badges appear in seconds."""
+        prompt = f"""Job description:
+{jd_text[:1500]}
 
-        One call, one extended schema — skills/fit ride along with the existing
-        score request rather than a second LLM round-trip per job.
-        """
+Candidate resume:
+{resume_text[:1500]}
+
+Score this candidate's fit from 0-10 and provide a one concise sentence summarizing the match quality.
+Respond ONLY with JSON, no other text:
+{{"score": 0, "one_line_summary": ""}}"""
+        try:
+            raw = _parse_json(_complete(prompt, max_tokens=60))
+        except (json.JSONDecodeError, Exception):
+            raw = {}
+        return {
+            "score": _clamp_score(raw.get("score")),
+            "reasoning": "",
+            "experience_fit": "",
+            "one_line_summary": _str(raw.get("one_line_summary"))[:128],
+            "matched_skills": [],
+            "missing_skills": [],
+        }
+
+    def explain_match(self, resume_text: str, jd_text: str) -> dict:
+        """On-demand diagnostic: resume + JD → {reasoning, experience_fit, matched_skills, missing_skills}."""
         prompt = f"""Job description:
 {jd_text}
 
 Candidate resume:
 {resume_text}
 
-Score this candidate's fit from 0-10 and give a 2-sentence reason.
-Also give: experience_fit (one short phrase, e.g. "Good fit" / "Underqualified" /
-"Overqualified"), one_line_summary (one concise sentence summarizing the match quality),
-matched_skills (skill names from the JD the candidate already has,
-deduplicated, no duplicates with missing_skills), missing_skills (skill names the JD
-wants that the candidate's resume doesn't show). Skill names only, no sentences. Keep
-both lists short (max 6 each).
+Give a 2-sentence reason explaining the candidate's fit for this job.
+Also give: experience_fit (one short phrase, e.g. "Good fit" / "Underqualified" / "Overqualified"),
+matched_skills (skill names from the JD the candidate already has, deduplicated),
+missing_skills (skill names the JD wants that the candidate's resume doesn't show). Skill names only, no sentences. Keep both lists short (max 6 each).
 Respond ONLY with JSON, no other text:
-{{"score": 0, "reasoning": "", "experience_fit": "", "one_line_summary": "", "matched_skills": [], "missing_skills": []}}"""
+{{"reasoning": "", "experience_fit": "", "matched_skills": [], "missing_skills": []}}"""
         try:
             raw = _parse_json(_complete(prompt))
         except (json.JSONDecodeError, Exception):
             raw = {}
-        # always return a safe, fully-typed shape — a bad reply must never crash
-        # the scoring loop (KeyError) or the DB write (string into a FloatField).
         return {
-            "score": _clamp_score(raw.get("score")),
             "reasoning": _str(raw.get("reasoning")),
             "experience_fit": _str(raw.get("experience_fit"))[:32],
-            "one_line_summary": _str(raw.get("one_line_summary"))[:128],
             "matched_skills": _str_list(raw.get("matched_skills"))[:6],
             "missing_skills": _str_list(raw.get("missing_skills"))[:6],
         }

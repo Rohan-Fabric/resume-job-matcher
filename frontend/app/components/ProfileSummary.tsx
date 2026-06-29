@@ -1,5 +1,5 @@
-import type { CandidateProfile } from "../lib/types";
-import { Mail, Phone, MapPin } from "lucide-react";
+import type { CandidateProfile, JobMatch } from "../lib/types";
+import { Mail, Phone, MapPin, CheckCircle } from "lucide-react";
 import { FaLinkedin, FaGithub } from "react-icons/fa";
 
 function ContactBtn({
@@ -20,7 +20,7 @@ function ContactBtn({
   );
 }
 
-export function ProfileSummary({ profile }: { profile: CandidateProfile }) {
+export function ProfileSummary({ profile, matches }: { profile: CandidateProfile; matches?: JobMatch[] }) {
   const initials =
     profile.name
       ?.split(" ")
@@ -33,11 +33,32 @@ export function ProfileSummary({ profile }: { profile: CandidateProfile }) {
     .filter(Boolean)
     .join(" · ");
 
+  // Profile completeness: checks key fields
+  const completenessScore = [
+    profile.email,
+    profile.phone,
+    profile.linkedin,
+    profile.github,
+    profile.skills?.length,
+    profile.years_experience,
+  ].filter(Boolean).length;
+  const completenessLabel = completenessScore >= 5 ? "Strong" : completenessScore >= 3 ? "Good" : "Basic";
+  const completenessColor = completenessScore >= 5 ? "text-brand" : completenessScore >= 3 ? "text-amber" : "text-rose";
+
+  // Skill demand: count jobs requiring each skill (case-insensitive match)
+  const skillDemand = matches ? profile.skills.slice(0, 5).map(skill => ({
+    skill,
+    count: matches.filter(j =>
+      j.matched_skills?.some(s => s.toLowerCase() === skill.toLowerCase()) ||
+      j.missing_skills?.some(s => s.toLowerCase() === skill.toLowerCase())
+    ).length
+  })).filter(s => s.count > 0).sort((a, b) => b.count - a.count) : [];
+
   return (
-    <div className="overflow-hidden rounded-3xl border border-line bg-surface card-lift fade-up">
+    <div className="rounded-3xl border border-line bg-surface card-lift fade-up max-h-[calc(100vh-6rem)] overflow-y-auto">
       {/* cover band */}
       <div
-        className="h-24"
+        className="h-24 shrink-0"
         style={{ background: "linear-gradient(120deg, var(--brand), var(--brand-ink))" }}
       />
 
@@ -53,6 +74,10 @@ export function ProfileSummary({ profile }: { profile: CandidateProfile }) {
         {profile.titles?.[0] && (
           <p className="mt-0.5 text-sm font-medium text-brand">{profile.titles[0]}</p>
         )}
+        <p className="mt-1.5 flex items-center justify-center gap-1.5 text-xs text-muted">
+          <CheckCircle className={`h-3.5 w-3.5 ${completenessColor}`} />
+          <span className={completenessColor}>Profile: {completenessLabel}</span>
+        </p>
         {place && (
           <p className="mt-1.5 flex items-center justify-center gap-1 text-sm text-muted">
             <MapPin className="h-3.5 w-3.5" />
@@ -102,22 +127,43 @@ export function ProfileSummary({ profile }: { profile: CandidateProfile }) {
           </div>
         </div>
 
-        {/* skills */}
+        {/* skills with demand */}
         {profile.skills?.length > 0 && (
           <div className="mt-6 text-left">
             <p className="mb-2.5 text-[11px] font-medium uppercase tracking-wide text-muted">
               Top skills
             </p>
-            <div className="flex flex-wrap gap-2">
-              {profile.skills.slice(0, 12).map((s) => (
-                <span
-                  key={s}
-                  className="rounded-full border border-line bg-bg px-3 py-1 text-xs text-ink-soft"
-                >
-                  {s}
-                </span>
-              ))}
-            </div>
+            {skillDemand.length > 0 ? (
+              <div className="space-y-2">
+                {skillDemand.map(({ skill, count }) => {
+                  const maxCount = Math.max(...skillDemand.map(s => s.count));
+                  const width = (count / maxCount) * 100;
+                  return (
+                    <div key={skill} className="flex items-center gap-2">
+                      <span className="w-20 text-xs text-ink-soft truncate">{skill}</span>
+                      <div className="flex-1 h-1.5 rounded-full bg-line overflow-hidden">
+                        <div 
+                          className="h-full rounded-full bg-brand transition-all duration-500"
+                          style={{ width: `${width}%` }}
+                        />
+                      </div>
+                      <span className="text-[11px] text-muted tabular-nums">{count} jobs</span>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {profile.skills.slice(0, 12).map((s) => (
+                  <span
+                    key={s}
+                    className="rounded-full border border-line bg-bg px-3 py-1 text-xs text-ink-soft"
+                  >
+                    {s}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>

@@ -71,6 +71,14 @@ class JobMatchRepository:
             matched_skills=matched_skills or [], missing_skills=missing_skills or [],
         )
 
+    def update_explanation(self, job_id: int, *, reasoning: str, experience_fit: str,
+                           matched_skills: list, missing_skills: list) -> JobMatch | None:
+        JobMatch.objects.filter(pk=job_id).update(
+            reasoning=reasoning, experience_fit=experience_fit,
+            matched_skills=matched_skills, missing_skills=missing_skills
+        )
+        return self.get(job_id)
+
 
 class TailoredResumeRepository:
     def create(self, *, job_match: JobMatch, content: str) -> TailoredResume:

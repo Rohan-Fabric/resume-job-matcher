@@ -1,4 +1,4 @@
-import type { JobFilters, Resume } from "./types";
+import type { JobFilters, JobMatch, Resume } from "./types";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -116,4 +116,15 @@ export async function tailorForJob(jobId: number): Promise<Blob> {
     throw new Error(`Tailoring failed (${res.status})`);
   }
   return res.blob();
+}
+
+/** Compute diagnostic reasoning and skill gaps on demand when user clicks 'Why this match'. */
+export async function explainJobMatch(jobId: number): Promise<JobMatch> {
+  const res = await fetch(`${BASE}/api/v1/matches/${jobId}/explain/`, {
+    method: "POST",
+  });
+  if (!res.ok) {
+    throw new Error(`Explanation failed (${res.status})`);
+  }
+  return res.json();
 }
