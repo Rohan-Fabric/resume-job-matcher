@@ -93,7 +93,7 @@ export interface ScoreBatchResult {
  *  ones come back in THIS response, so a live poll can't undo an active filter. */
 export async function scoreBatch(
   resumeId: number,
-  batch = 8,
+  batch = 25,
   filters: JobFilters = {},
 ): Promise<ScoreBatchResult> {
   const res = await fetch(`${BASE}/api/v1/resumes/${resumeId}/score/`, {

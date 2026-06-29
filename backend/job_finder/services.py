@@ -158,7 +158,7 @@ class ResumeMatchService:
             source=j.get("source", ""),
         )
 
-    def score_pending(self, *, resume_id: int, batch: int = 8):
+    def score_pending(self, *, resume_id: int, batch: int = 25):
         """Score up to `batch` not-yet-scored jobs for this resume, in parallel.
 
         Upload/search save jobs unscored; the client calls this repeatedly so

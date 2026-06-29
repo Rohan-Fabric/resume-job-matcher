@@ -125,7 +125,7 @@ class ResumeViewSet(ViewSet):
         the same filter params as GET retrieve() so the matches in THIS
         response stay narrowed; otherwise a live poll would overwrite an
         active filter with the full unfiltered list mid-poll."""
-        batch = int(request.data.get("batch") or 8)
+        batch = int(request.data.get("batch") or 25)
         result = ResumeMatchService().score_pending(resume_id=int(pk), batch=batch)
         if result is None:
             return Response(status=status.HTTP_404_NOT_FOUND)
