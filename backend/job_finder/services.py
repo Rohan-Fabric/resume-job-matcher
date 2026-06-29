@@ -49,10 +49,9 @@ class ResumeMatchService:
         found = self.jobs.search(profile_data)
         rows = [self._build_job_row(resume, j) for j in found]
         self.job_repo.bulk_create(rows)
-        # Jobs are saved UNSCORED. The client scores them in batches via
-        # score_pending(), so cards appear immediately and fill in live instead
-        # of the user waiting on the whole scoring loop.
-        return resume
+        if rows:
+            self.score_pending(resume_id=resume.pk, batch=len(rows))
+        return self.resume_repo.get(resume.pk)
 
     def find_more_jobs(
         self,
@@ -133,8 +132,10 @@ class ResumeMatchService:
         fresh = [j for j in found if j["source_url"] and j["source_url"] not in seen]
 
         rows = [self._build_job_row(resume, j) for j in fresh]
-        self.job_repo.bulk_create(rows)  # unscored — scored progressively via score_pending()
-        return resume
+        self.job_repo.bulk_create(rows)
+        if rows:
+            self.score_pending(resume_id=resume_id, batch=len(rows))
+        return self.resume_repo.get(resume_id)
 
     @staticmethod
     def _build_job_row(resume, j: dict) -> JobMatch:
