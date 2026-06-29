@@ -14,7 +14,12 @@ from django.conf import settings
 from openai import OpenAI, RateLimitError
 
 
-def _client() -> OpenAI:
+def _client(for_google: bool = False) -> OpenAI:
+    if for_google and getattr(settings, "GOOGLE_API_KEY", ""):
+        return OpenAI(
+            api_key=settings.GOOGLE_API_KEY,
+            base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
+        )
     return OpenAI(
         api_key=settings.OPENROUTER_API_KEY,
         base_url=settings.OPENROUTER_BASE_URL,
@@ -22,13 +27,18 @@ def _client() -> OpenAI:
 
 
 def _complete(prompt: str, max_tokens: int | None = None, model: str | None = None) -> str:
-    """One OpenRouter chat completion call. Returns the raw text reply.
+    """One chat completion call (OpenRouter or Google AI Studio). Returns raw text reply.
 
     Retries on rate-limit (429) with a short backoff — important now that scoring
-    fans out ~12 concurrent calls, which can briefly trip the free-tier limit.
+    fans out concurrent calls.
     """
+    target_model = model or settings.OPENROUTER_MODEL
+    is_google = bool(getattr(settings, "GOOGLE_API_KEY", "")) and ("gemini" in target_model.lower())
+    if is_google:
+        target_model = target_model.split("/")[-1].split(":")[0]
+
     kwargs: dict = {
-        "model": model or settings.OPENROUTER_MODEL,
+        "model": target_model,
         "extra_headers": {
             "HTTP-Referer": "http://localhost:3000",
             "X-Title": "Resume Job Matcher",
@@ -40,7 +50,7 @@ def _complete(prompt: str, max_tokens: int | None = None, model: str | None = No
 
     for attempt in range(3):
         try:
-            response = _client().chat.completions.create(**kwargs)
+            response = _client(for_google=is_google).chat.completions.create(**kwargs)
             return response.choices[0].message.content or ""
         except RateLimitError:
             if attempt == 2:
@@ -222,7 +232,7 @@ def _normalize_resume(raw: dict, fallback_text: str) -> dict:
 
 
 class LLMClient:
-    def extract_profile(self, resume_text: str) -> dict:
+    def extract_profile(self, resume_text: str, model: str | None = None) -> dict:
         """resume text → normalized profile dict matching CandidateProfile fields."""
         prompt = f"""Extract the candidate's profile from this resume.
 
@@ -241,7 +251,8 @@ Resume:
 Respond ONLY with JSON, no other text:
 {{"name": "", "email": "", "phone": "", "location": "", "country": "", "skills": [], "titles": [], "years_experience": null}}"""
         try:
-            raw = _parse_json(_complete(prompt))
+            use_model = model or getattr(settings, "OPENROUTER_MODEL_EXTRACT", settings.OPENROUTER_MODEL)
+            raw = _parse_json(_complete(prompt, model=use_model))
         except (json.JSONDecodeError, Exception):
             raw = {}
 

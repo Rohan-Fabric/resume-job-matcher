@@ -65,6 +65,8 @@ MEDIA_ROOT = BASE_DIR / "media"
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
 OPENROUTER_BASE_URL = os.environ.get("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
 OPENROUTER_MODEL = os.environ.get("OPENROUTER_MODEL", "openai/gpt-oss-120b:free")
+GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY", "")
+OPENROUTER_MODEL_EXTRACT = os.environ.get("OPENROUTER_MODEL_EXTRACT", "gemini-2.5-flash")
 # Tailoring is prose-heavy; let it use a separate (stronger/steadier) model.
 OPENROUTER_MODEL_TAILOR = os.environ.get(
     "OPENROUTER_MODEL_TAILOR", "meta-llama/llama-3.3-70b-instruct:free"
