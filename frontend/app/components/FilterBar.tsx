@@ -38,14 +38,30 @@ function Toggle({ on, onClick }: { on: boolean; onClick: () => void }) {
       role="switch"
       aria-checked={on}
       onClick={onClick}
-      className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${
-        on ? "bg-brand" : "bg-line-strong"
-      }`}
+      style={{
+        position: "relative",
+        width: 44,
+        height: 24,
+        borderRadius: 9999,
+        border: "none",
+        padding: 0,
+        cursor: "pointer",
+        transition: "background-color 0.2s ease",
+        backgroundColor: on ? "var(--brand)" : "#d1d5db",
+      }}
     >
       <span
-        className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${
-          on ? "translate-x-4" : "translate-x-0.5"
-        }`}
+        style={{
+          position: "absolute",
+          top: 2,
+          left: on ? 22 : 2,
+          width: 20,
+          height: 20,
+          borderRadius: 9999,
+          backgroundColor: "#fff",
+          boxShadow: on ? "0 1px 3px rgba(0,0,0,0.2)" : "none",
+          transition: "left 0.2s ease",
+        }}
       />
     </button>
   );
@@ -55,7 +71,6 @@ export function FilterBar({ filters, onChange }: Props) {
   const active = !!(
     filters.postedWithin ||
     filters.jobType?.length ||
-    filters.minSalary ||
     filters.remote
   );
 
@@ -139,22 +154,6 @@ export function FilterBar({ filters, onChange }: Props) {
           </div>
         </Group>
 
-        {/* Minimum salary */}
-        <Group title="Minimum salary">
-          <input
-            type="number"
-            min={0}
-            placeholder="e.g. 50000"
-            value={filters.minSalary ?? ""}
-            onChange={(e) =>
-              onChange({
-                ...filters,
-                minSalary: e.target.value ? Number(e.target.value) : undefined,
-              })
-            }
-            className="w-full rounded-lg border border-line bg-bg px-3 py-2 text-sm text-ink outline-none transition-colors focus:border-brand"
-          />
-        </Group>
 
         {/* Workplace */}
         <Group title="Workplace">

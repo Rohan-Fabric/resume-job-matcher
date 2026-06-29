@@ -87,19 +87,7 @@ export function JobCard({ job, tailoring, onTailor }: Props) {
               </p>
             </div>
 
-            {total > 0 && (
-              <div className="shrink-0 text-right">
-                <p className="text-[11px] font-medium tabular-nums text-ink-soft">
-                  {matched}/{total} skills
-                </p>
-                <div className="mt-1 h-1 w-16 overflow-hidden rounded-full bg-line">
-                  <div
-                    className="h-full rounded-full bg-brand"
-                    style={{ width: `${(matched / total) * 100}%` }}
-                  />
-                </div>
-              </div>
-            )}
+
           </div>
 
           {/* resting summary, or shimmer while unscored */}

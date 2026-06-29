@@ -61,7 +61,6 @@ function filterParams(filters: JobFilters): Record<string, string> {
   const params: Record<string, string> = {};
   if (filters.postedWithin) params.posted_within = String(filters.postedWithin);
   if (filters.jobType?.length) params.job_type = filters.jobType.join(",");
-  if (filters.minSalary) params.min_salary = String(filters.minSalary);
   if (filters.remote !== undefined) params.remote = String(filters.remote);
   if (filters.source?.length) params.source = filters.source.join(",");
   return params;

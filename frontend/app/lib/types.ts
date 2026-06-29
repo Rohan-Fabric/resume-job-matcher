@@ -40,7 +40,6 @@ export interface JobMatch {
 export interface JobFilters {
   postedWithin?: 1 | 7 | 30;
   jobType?: string[];
-  minSalary?: number;
   remote?: boolean;
   source?: string[];
 }

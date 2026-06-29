@@ -20,7 +20,7 @@ type Phase = "idle" | "processing" | "results" | "error";
 function passesFilters(job: JobMatch, f: JobFilters): boolean {
   if (f.remote && !job.is_remote) return false;
   if (f.jobType?.length && !f.jobType.includes(job.job_type)) return false;
-  if (f.minSalary && !(job.salary_min != null && job.salary_min >= f.minSalary)) return false;
+
   if (f.postedWithin) {
     if (!job.posted_at) return false;
     const days = (Date.now() - new Date(job.posted_at).getTime()) / 86_400_000;
@@ -49,13 +49,7 @@ function activeChips(
       next: { ...f, jobType: (f.jobType ?? []).filter((x) => x !== t) || undefined },
     });
   }
-  if (f.minSalary) {
-    chips.push({
-      key: "salary",
-      label: `≥ ${f.minSalary.toLocaleString()}`,
-      next: { ...f, minSalary: undefined },
-    });
-  }
+
   if (f.remote) {
     chips.push({ key: "remote", label: "Remote only", next: { ...f, remote: undefined } });
   }
@@ -239,11 +233,6 @@ export default function Home() {
   // The resume is never re-parsed — only the job-search query changes.
   async function runSearch(roleOverride?: string) {
     if (!resume) return;
-    // onsite/hybrid need a city; remote ignores it
-    if (workType !== "remote" && !loc.trim()) {
-      setFilterErr("Enter a city for onsite or hybrid roles.");
-      return;
-    }
     setFilterErr("");
     setSearching(true);
     const useLoc = workType === "remote" ? "" : loc.trim();
@@ -405,30 +394,8 @@ export default function Home() {
                 </button>
               </div>
 
-              {/* hint / error row */}
-              {(detectedRole || filterErr) && (
-                <div className="flex flex-wrap items-center justify-between gap-2 px-1.5 pt-2">
-                  {detectedRole ? (
-                    roleOverridden ? (
-                      <p className="text-xs text-muted">
-                        Custom role ·{" "}
-                        <button
-                          onClick={() => runSearch(detectedRole)}
-                          className="font-medium text-brand hover:text-brand-ink"
-                        >
-                          reset to “{detectedRole}”
-                        </button>
-                      </p>
-                    ) : (
-                      <p className="text-xs text-muted">
-                        Detected from your resume — edit to search a different role
-                      </p>
-                    )
-                  ) : (
-                    <span />
-                  )}
-                  {filterErr && <p className="text-xs text-rose">{filterErr}</p>}
-                </div>
+              {filterErr && (
+                <p className="px-1.5 pt-2 text-xs text-rose">{filterErr}</p>
               )}
             </div>
 
