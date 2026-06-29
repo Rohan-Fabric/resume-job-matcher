@@ -245,11 +245,15 @@ For "titles", infer the candidate's primary professional role from the WHOLE res
 recent job). Return only the role, e.g. "Backend Developer" — not "Backend Developer
 at Acme", and not the literal heading from one job.
 
+For "years_experience", calculate or estimate the candidate's total professional work
+or internship experience in years as a float (e.g. 1.5, 3.0, or 0.5 for internships).
+If they are a student/fresher with projects or internships, estimate realistically (e.g. 0.5 or 1.0). Do not return null.
+
 Resume:
 {resume_text}
 
 Respond ONLY with JSON, no other text:
-{{"name": "", "email": "", "phone": "", "location": "", "country": "", "skills": [], "titles": [], "years_experience": null}}"""
+{{"name": "", "email": "", "phone": "", "location": "", "country": "", "skills": [], "titles": [], "years_experience": 0.0}}"""
         try:
             use_model = model or getattr(settings, "OPENROUTER_MODEL_EXTRACT", settings.OPENROUTER_MODEL)
             raw = _parse_json(_complete(prompt, model=use_model))
