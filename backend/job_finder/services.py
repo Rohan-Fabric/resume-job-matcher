@@ -45,12 +45,6 @@ class ResumeMatchService:
         self.profile_repo.create(resume=resume, **profile_data)
         self.resume_repo.mark_parsed(resume.pk)
 
-        # 2. find jobs from the internet using the profile
-        found = self.jobs.search(profile_data)
-        rows = [self._build_job_row(resume, j) for j in found]
-        self.job_repo.bulk_create(rows)
-        if rows:
-            self.score_pending(resume_id=resume.pk, batch=len(rows))
         return self.resume_repo.get(resume.pk)
 
     def find_more_jobs(

@@ -67,7 +67,7 @@ COUNTRY_NAMES: dict[str, set[str]] = {
     "pl": {"poland"}, "sg": {"singapore"}, "za": {"south africa"},
 }
 
-PER_PAGE = 5      # results per Adzuna call (keeps total scoring calls in check)
+PER_PAGE = 15     # results per Adzuna call (ensures enough raw listings to reach MAX_TOTAL of 25 after deduplication)
 MAX_TOTAL = 25    # cap total jobs → caps the LLM scoring loop (free-tier safe)
 
 
