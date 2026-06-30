@@ -74,8 +74,10 @@ class Migration(migrations.Migration):
             ),
         ),
 
-        # Drop the JobMatch table — ephemeral job data no longer belongs in Postgres.
-        migrations.DeleteModel(
-            name="JobMatch",
+        # Drop the JobMatch table — IF EXISTS so the migration is safe to run
+        # against a DB where the table was already removed manually.
+        migrations.RunSQL(
+            "DROP TABLE IF EXISTS job_finder_jobmatch CASCADE;",
+            reverse_sql=migrations.RunSQL.noop,
         ),
     ]
