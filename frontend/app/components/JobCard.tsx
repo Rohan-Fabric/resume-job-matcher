@@ -8,13 +8,12 @@ import { ScoreRing } from "./ScoreRing";
 
 interface Props {
   job: JobMatch;
+  resumeId: number;
   tailoring: boolean;
   onTailor: (job: JobMatch) => void;
   onUpdateJob?: (job: JobMatch) => void;
 }
 
-/** Accent colour for the card's left strip — mirrors the score-ring tiers.
- *  The colour is the only fit-tier signal now (no repeated text label). */
 function accentColor(score: number | null): string {
   if (score === null || score === undefined) return "var(--line-strong)";
   if (score >= 7) return "var(--brand)";
@@ -22,16 +21,11 @@ function accentColor(score: number | null): string {
   return "var(--rose)";
 }
 
-/** Show the job's actual city/area. Falls back to country only if the source
- *  gave no location. Remote roles are flagged as such. */
 function locationLabel(job: JobMatch): string {
-  if (job.is_remote) {
-    return job.location ? `Remote · ${job.location}` : "Remote";
-  }
+  if (job.is_remote) return job.location ? `Remote · ${job.location}` : "Remote";
   return job.location || job.country?.toUpperCase() || "—";
 }
 
-/** "3d ago" / "2w ago" — null/invalid dates render nothing rather than guess. */
 function postedLabel(postedAt: string | null): string | null {
   if (!postedAt) return null;
   const days = Math.floor((Date.now() - new Date(postedAt).getTime()) / 86_400_000);
@@ -46,13 +40,13 @@ function jobTypeLabel(jobType: string): string {
   return jobType.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-export function JobCard({ job, tailoring, onTailor, onUpdateJob }: Props) {
+export function JobCard({ job, resumeId, tailoring, onTailor, onUpdateJob }: Props) {
   const [expanded, setExpanded] = useState(false);
   const [explaining, setExplaining] = useState(false);
 
   const matched = job.matched_skills.length;
   const total = matched + job.missing_skills.length;
-  // one quiet meta line instead of a row of pills
+
   const meta = [
     locationLabel(job),
     job.salary_raw,
@@ -61,7 +55,7 @@ export function JobCard({ job, tailoring, onTailor, onUpdateJob }: Props) {
   ]
     .filter(Boolean)
     .join(" · ");
-  // resting summary: prefer the one-liner, fall back to the full reasoning
+
   const summary = job.one_line_summary || job.reasoning;
   const canExplain = job.fit_score != null || !!(job.reasoning || job.experience_fit || total > 0);
 
@@ -70,8 +64,8 @@ export function JobCard({ job, tailoring, onTailor, onUpdateJob }: Props) {
       setExpanded(true);
       setExplaining(true);
       try {
-        const updated = await explainJobMatch(job.id);
-        onUpdateJob?.(updated);
+        const explanation = await explainJobMatch(resumeId, job);
+        onUpdateJob?.({ ...job, ...explanation });
       } catch (e) {
         console.error("Failed to explain job", e);
       } finally {
@@ -84,7 +78,6 @@ export function JobCard({ job, tailoring, onTailor, onUpdateJob }: Props) {
 
   return (
     <article className="group card-interactive relative overflow-hidden rounded-2xl border border-line bg-surface p-5">
-      {/* tier accent strip — the only fit-tier signal besides the ring */}
       <span
         aria-hidden
         className="absolute inset-y-0 left-0 w-1"
@@ -95,7 +88,6 @@ export function JobCard({ job, tailoring, onTailor, onUpdateJob }: Props) {
         <ScoreRing score={job.fit_score} />
 
         <div className="min-w-0 flex-1">
-          {/* title + skill meter on one line */}
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <h3 className="text-[15px] font-semibold leading-snug text-ink break-words">
@@ -106,11 +98,8 @@ export function JobCard({ job, tailoring, onTailor, onUpdateJob }: Props) {
                 {meta && <span> · {meta}</span>}
               </p>
             </div>
-
-
           </div>
 
-          {/* resting summary, or shimmer while unscored */}
           {summary ? (
             <p className="mt-2 line-clamp-2 text-sm leading-relaxed text-ink-soft break-words">
               {summary}
@@ -122,7 +111,6 @@ export function JobCard({ job, tailoring, onTailor, onUpdateJob }: Props) {
             </div>
           ) : null}
 
-          {/* actions */}
           <div className="mt-4 flex flex-wrap items-center gap-2.5">
             <a
               href={job.source_url}
@@ -160,7 +148,6 @@ export function JobCard({ job, tailoring, onTailor, onUpdateJob }: Props) {
             )}
           </div>
 
-          {/* expanded detail — reasoning, experience fit, skill gap */}
           {expanded && canExplain && (
             <div className="fade-up mt-3 rounded-xl bg-bg p-3.5">
               {explaining ? (

@@ -1,4 +1,4 @@
-import type { JobFilters, JobMatch, Resume } from "./types";
+import type { JobMatch, Resume } from "./types";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -11,7 +11,6 @@ export async function uploadResume(file: File): Promise<Resume> {
     body: form,
   });
   if (!res.ok) {
-    // surface the backend's reason (e.g. "not a resume") instead of a generic code
     let msg = `Upload failed (${res.status})`;
     try {
       const body = await res.json();
@@ -27,11 +26,10 @@ export async function uploadResume(file: File): Promise<Resume> {
 export interface JobSearchOpts {
   location?: string;
   workType?: "remote" | "onsite" | "hybrid";
-  replace?: boolean;
-  role?: string; // overrides the resume's detected title for this search only
+  role?: string;  // overrides the resume's detected title for this search
 }
 
-/** Fetch + score jobs (deduped server-side). replace=true clears prior matches. */
+/** Fetch + score jobs for a resume. Returns resume shape with `matches` included. */
 export async function loadMoreJobs(
   resumeId: number,
   page: number,
@@ -44,87 +42,44 @@ export async function loadMoreJobs(
       page,
       location: opts.location || undefined,
       work_type: opts.workType,
-      replace: opts.replace,
       role: opts.role || undefined,
     }),
   });
-  if (!res.ok) {
-    throw new Error(`Job search failed (${res.status})`);
-  }
+  if (!res.ok) throw new Error(`Job search failed (${res.status})`);
   return res.json();
 }
 
-/** JobFilters → the query-param shape the backend's _filter_kwargs() expects.
- *  Shared by fetchFilteredResume (GET query string) and scoreBatch (POST body) —
- *  both need the active filter to reach the backend identically. */
-function filterParams(filters: JobFilters): Record<string, string> {
-  const params: Record<string, string> = {};
-  if (filters.postedWithin) params.posted_within = String(filters.postedWithin);
-  if (filters.jobType?.length) params.job_type = filters.jobType.join(",");
-  if (filters.remote !== undefined) params.remote = String(filters.remote);
-  if (filters.source?.length) params.source = filters.source.join(",");
-  return params;
-}
-
-/** Re-fetch the resume with its matches narrowed server-side by `filters` —
- *  no new job-search API call, just a different query against saved jobs. */
-export async function fetchFilteredResume(
+/** Compute diagnostic reasoning and skill gaps on demand when user clicks 'Why this match'.
+ *  Sends the job's JD text in the request body — no DB lookup needed. */
+export async function explainJobMatch(
   resumeId: number,
-  filters: JobFilters = {},
-): Promise<Resume> {
-  const params = new URLSearchParams(filterParams(filters));
-  const res = await fetch(`${BASE}/api/v1/resumes/${resumeId}/?${params.toString()}`);
-  if (!res.ok) {
-    throw new Error(`Filter fetch failed (${res.status})`);
-  }
-  return res.json();
-}
-
-export interface ScoreBatchResult {
-  resume: Resume;
-  remaining: number;
-  done: boolean;
-}
-
-/** Score the next batch of not-yet-scored jobs. Call repeatedly until `done`,
- *  so the UI can fill cards in live instead of waiting for the whole loop.
- *  `filters` keeps the response's matches narrowed to whatever's currently
- *  active — every job still gets scored regardless, this only affects which
- *  ones come back in THIS response, so a live poll can't undo an active filter. */
-export async function scoreBatch(
-  resumeId: number,
-  batch = 25,
-  filters: JobFilters = {},
-): Promise<ScoreBatchResult> {
-  const res = await fetch(`${BASE}/api/v1/resumes/${resumeId}/score/`, {
+  job: JobMatch,
+): Promise<Partial<JobMatch>> {
+  const res = await fetch(`${BASE}/api/v1/resumes/${resumeId}/explain/`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ batch, ...filterParams(filters) }),
+    body: JSON.stringify({
+      title: job.title,
+      company: job.company,
+      jd_text: job.jd_text,
+    }),
   });
-  if (!res.ok) {
-    throw new Error(`Scoring failed (${res.status})`);
-  }
+  if (!res.ok) throw new Error(`Explanation failed (${res.status})`);
   return res.json();
 }
 
-/** Tailor the resume for a job; the backend returns a ready-made PDF (blob). */
-export async function tailorForJob(jobId: number): Promise<Blob> {
-  const res = await fetch(`${BASE}/api/v1/matches/${jobId}/tailor/`, {
+/** Tailor the resume for a job; the backend returns a ready-made PDF blob.
+ *  Sends job context in the request body — no DB lookup needed. */
+export async function tailorForJob(resumeId: number, job: JobMatch): Promise<Blob> {
+  const res = await fetch(`${BASE}/api/v1/resumes/${resumeId}/tailor/`, {
     method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      title: job.title,
+      company: job.company,
+      jd_text: job.jd_text,
+    }),
   });
-  if (!res.ok) {
-    throw new Error(`Tailoring failed (${res.status})`);
-  }
+  if (!res.ok) throw new Error(`Tailoring failed (${res.status})`);
   return res.blob();
-}
-
-/** Compute diagnostic reasoning and skill gaps on demand when user clicks 'Why this match'. */
-export async function explainJobMatch(jobId: number): Promise<JobMatch> {
-  const res = await fetch(`${BASE}/api/v1/matches/${jobId}/explain/`, {
-    method: "POST",
-  });
-  if (!res.ok) {
-    throw new Error(`Explanation failed (${res.status})`);
-  }
-  return res.json();
 }

@@ -13,10 +13,12 @@ export interface CandidateProfile {
 }
 
 export interface JobMatch {
-  id: number;
+  // No `id` — jobs are ephemeral dicts returned by the search endpoint, never
+  // persisted to the DB. Use `source_url` as the stable key within a session.
   title: string;
   company: string;
   source_url: string;
+  jd_text: string;
   is_remote: boolean;
   location: string;
   country: string;
@@ -41,7 +43,6 @@ export interface JobFilters {
   postedWithin?: 1 | 7 | 30;
   jobType?: string[];
   remote?: boolean;
-  source?: string[];
 }
 
 export interface Resume {
@@ -50,11 +51,4 @@ export interface Resume {
   created_date: string;
   profile: CandidateProfile | null;
   matches: JobMatch[];
-}
-
-export interface TailoredResume {
-  id: number;
-  job_match: number;
-  content: string;
-  created_date: string;
 }

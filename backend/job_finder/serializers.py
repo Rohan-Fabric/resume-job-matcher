@@ -1,7 +1,7 @@
 """Input validation and output shaping for the API."""
 from rest_framework import serializers
 
-from .models import CandidateProfile, JobMatch, Resume, TailoredResume
+from .models import CandidateProfile, Resume
 
 
 class ResumeUploadInputSerializer(serializers.Serializer):
@@ -17,28 +17,11 @@ class CandidateProfileOutputSerializer(serializers.ModelSerializer):
         ]
 
 
-class JobMatchOutputSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = JobMatch
-        fields = [
-            "id", "title", "company", "source_url", "is_remote",
-            "location", "country", "tier", "fit_score", "reasoning",
-            "posted_at", "salary_raw", "salary_min", "salary_max", "currency", "salary_period",
-            "job_type", "source",
-            "experience_fit", "one_line_summary", "matched_skills", "missing_skills",
-        ]
-
-
 class ResumeOutputSerializer(serializers.ModelSerializer):
+    """Resume + profile only. Matches (job results) are ephemeral and returned
+    as plain dicts alongside this serializer's output by the search endpoint."""
     profile = CandidateProfileOutputSerializer(read_only=True)
-    matches = JobMatchOutputSerializer(many=True, read_only=True)
 
     class Meta:
         model = Resume
-        fields = ["id", "is_parsed", "created_date", "profile", "matches"]
-
-
-class TailoredResumeOutputSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = TailoredResume
-        fields = ["id", "job_match", "content", "created_date"]
+        fields = ["id", "is_parsed", "created_date", "profile"]
