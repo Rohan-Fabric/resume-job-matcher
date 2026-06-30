@@ -75,3 +75,17 @@ ADZUNA_APP_ID = os.environ.get("ADZUNA_APP_ID", "")
 ADZUNA_APP_KEY = os.environ.get("ADZUNA_APP_KEY", "")
 ADZUNA_BASE_URL = os.environ.get("ADZUNA_BASE_URL", "https://api.adzuna.com/v1/api/jobs")
 JOOBLE_API_KEY = os.environ.get("JOOBLE_API_KEY", "")
+
+# --- Telemetry / Observability (Sentry) ---
+SENTRY_DSN = os.environ.get("SENTRY_DSN", "")
+if SENTRY_DSN:
+    try:
+        import sentry_sdk
+        sentry_sdk.init(
+            dsn=SENTRY_DSN,
+            traces_sample_rate=1.0,
+            send_default_pii=True,
+        )
+    except ImportError:
+        pass
+

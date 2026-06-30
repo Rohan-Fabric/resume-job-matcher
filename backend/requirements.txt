@@ -7,3 +7,5 @@ pypdf==5.1.0
 python-dotenv==1.0.1
 requests==2.32.3
 weasyprint==63.1
+sentry-sdk>=2.19.0
+
