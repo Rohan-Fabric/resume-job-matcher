@@ -400,4 +400,10 @@ Original resume:
             )
         except (json.JSONDecodeError, Exception):
             raw = {}
+        if not raw:
+            # Total LLM failure (429 / timeout / non-JSON). The fallback in
+            # _normalize_resume dumps the raw resume text into `summary`, which
+            # ships a broken PDF. Fail loudly so the caller returns an error and
+            # the user retries instead of downloading garbage.
+            raise RuntimeError("tailor_failed")
         return _normalize_resume(raw, resume_text)

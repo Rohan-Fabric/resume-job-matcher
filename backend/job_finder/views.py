@@ -92,12 +92,19 @@ class ResumeViewSet(ViewSet):
         """Tailor the resume for a specific job, return as a PDF download.
 
         Body: { "title": "...", "company": "...", "jd_text": "..." }"""
-        result = ResumeMatchService().tailor_for_job(
-            resume_id=int(pk),
-            title=request.data.get("title", ""),
-            company=request.data.get("company", ""),
-            jd_text=request.data.get("jd_text", ""),
-        )
+        try:
+            result = ResumeMatchService().tailor_for_job(
+                resume_id=int(pk),
+                title=request.data.get("title", ""),
+                company=request.data.get("company", ""),
+                jd_text=request.data.get("jd_text", ""),
+            )
+        except RuntimeError:
+            # LLM failed to produce a tailored resume (rate limit / bad output).
+            return Response(
+                {"detail": "Tailoring is busy right now — please try again in a moment."},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
         if result is None:
             return Response(status=status.HTTP_404_NOT_FOUND)
         data, filename = result

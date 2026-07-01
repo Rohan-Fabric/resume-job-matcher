@@ -184,6 +184,7 @@ export default function Home() {
       setTimeout(() => URL.revokeObjectURL(url), 4000);
     } catch (e) {
       console.error("tailor download failed", e);
+      alert("Tailoring is busy right now — please try again in a moment.");
     } finally {
       setTailorLoading(false);
       setActiveJob(null);
