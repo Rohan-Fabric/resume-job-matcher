@@ -7,11 +7,13 @@ currently openai/gpt-oss-120b:free for all tasks.
 from __future__ import annotations
 
 import json
+import random
 import re
 import time
 
 from django.conf import settings
-from openai import OpenAI, RateLimitError
+from openai import APIConnectionError, APIStatusError, OpenAI, RateLimitError
+
 
 
 def _client(for_google: bool = False) -> OpenAI:
@@ -52,10 +54,19 @@ def _complete(prompt: str, max_tokens: int | None = None, model: str | None = No
         try:
             response = _client(for_google=is_google).chat.completions.create(**kwargs)
             return response.choices[0].message.content or ""
-        except RateLimitError:
+        except (RateLimitError, APIConnectionError):
             if attempt == 2:
-                raise
-            time.sleep(1.5 * (attempt + 1))  # 1.5s, then 3s
+                return ""
+            backoff = (2 ** attempt) + random.uniform(0.2, 0.8)
+            time.sleep(backoff)
+        except APIStatusError as err:
+            if err.status_code == 429 or err.status_code >= 500:
+                if attempt == 2:
+                    return ""
+                backoff = (2 ** attempt) + random.uniform(0.2, 0.8)
+                time.sleep(backoff)
+            else:
+                return ""
     return ""
 
 

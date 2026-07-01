@@ -5,12 +5,15 @@ Verifies that:
 2. Stateless explanation (`explain/`) accepts job data in the request body and returns enriched details.
 3. Tailoring (`tailor/`) accepts job data in the request body, returns a PDF attachment, and correctly persists the job context inline in `TailoredResume`.
 """
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 from django.urls import reverse
+from openai import RateLimitError
 from rest_framework import status
 from rest_framework.test import APITestCase
 
+from job_finder.clients.llm_client import _complete
 from job_finder.models import Resume, CandidateProfile, TailoredResume
+
 
 
 class EphemeralFlowAPITests(APITestCase):
@@ -126,3 +129,32 @@ class EphemeralFlowAPITests(APITestCase):
         self.assertEqual(tailored.job_title, "Senior Python Developer")
         self.assertEqual(tailored.job_company, "Acme Inc")
         self.assertEqual(tailored.job_jd_text, "Need senior engineer familiar with Python.")
+
+    @patch("job_finder.clients.llm_client.time.sleep")
+    @patch("job_finder.clients.llm_client._client")
+    def test_llm_complete_retries_on_rate_limit_and_succeeds(self, mock_client, mock_sleep):
+        mock_create = MagicMock()
+        mock_client.return_value.chat.completions.create = mock_create
+        # Attempt 1 & 2 fail with 429 RateLimitError, Attempt 3 succeeds
+        mock_create.side_effect = [
+            RateLimitError("429 Too Many Requests", response=MagicMock(), body=None),
+            RateLimitError("429 Too Many Requests", response=MagicMock(), body=None),
+            MagicMock(choices=[MagicMock(message=MagicMock(content='{"score": 8.5}'))]),
+        ]
+        res = _complete("Test prompt")
+        self.assertEqual(res, '{"score": 8.5}')
+        self.assertEqual(mock_create.call_count, 3)
+        self.assertEqual(mock_sleep.call_count, 2)
+
+    @patch("job_finder.clients.llm_client.time.sleep")
+    @patch("job_finder.clients.llm_client._client")
+    def test_llm_complete_exhausts_retries_gracefully(self, mock_client, mock_sleep):
+        mock_create = MagicMock()
+        mock_client.return_value.chat.completions.create = mock_create
+        # All 3 attempts fail with 429 RateLimitError
+        mock_create.side_effect = RateLimitError("429 Too Many Requests", response=MagicMock(), body=None)
+        res = _complete("Test prompt")
+        self.assertEqual(res, "")
+        self.assertEqual(mock_create.call_count, 3)
+        self.assertEqual(mock_sleep.call_count, 2)
+
