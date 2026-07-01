@@ -53,7 +53,17 @@ def _complete(prompt: str, max_tokens: int | None = None, model: str | None = No
     for attempt in range(3):
         try:
             response = _client(for_google=is_google).chat.completions.create(**kwargs)
-            return response.choices[0].message.content or ""
+            content = response.choices[0].message.content or ""
+            if content.strip():
+                return content
+            # Empty 200 response — gpt-oss:free returns no content intermittently
+            # (not a 429, so the except clauses never catch it). Retry it as a
+            # transient failure instead of returning "" straight into the caller's
+            # JSON-parse-fails → tailor_failed path.
+            if attempt == 2:
+                return content
+            time.sleep((2 ** attempt) + random.uniform(0.2, 0.8))
+            continue
         except (RateLimitError, APIConnectionError):
             if attempt == 2:
                 return ""

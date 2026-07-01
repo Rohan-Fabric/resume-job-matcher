@@ -11,8 +11,9 @@ from openai import RateLimitError
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from job_finder.clients.llm_client import _complete
+from job_finder.clients.llm_client import _complete, LLMClient
 from job_finder.models import Resume, CandidateProfile, TailoredResume
+
 
 
 
@@ -157,4 +158,12 @@ class EphemeralFlowAPITests(APITestCase):
         self.assertEqual(res, "")
         self.assertEqual(mock_create.call_count, 3)
         self.assertEqual(mock_sleep.call_count, 2)
+
+    @patch("job_finder.clients.llm_client._complete")
+    def test_tailor_resume_raises_runtime_error_on_total_llm_failure(self, mock_complete):
+        mock_complete.return_value = ""
+        client = LLMClient()
+        with self.assertRaisesMessage(RuntimeError, "tailor_failed"):
+            client.tailor_resume("My resume text", "JD text")
+
 
