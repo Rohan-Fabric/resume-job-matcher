@@ -69,7 +69,7 @@ export async function explainJobMatch(
 }
 
 /** Tailor the resume for a job; the backend returns a ready-made PDF blob.
- *  Sends source_url so the backend can serve a pretailored result if ready. */
+ *  Sends job context in the request body — no DB lookup needed. */
 export async function tailorForJob(resumeId: number, job: JobMatch): Promise<Blob> {
   const res = await fetch(`${BASE}/api/v1/resumes/${resumeId}/tailor/`, {
     method: "POST",
@@ -78,26 +78,8 @@ export async function tailorForJob(resumeId: number, job: JobMatch): Promise<Blo
       title: job.title,
       company: job.company,
       jd_text: job.jd_text,
-      source_url: job.source_url,
     }),
   });
   if (!res.ok) throw new Error(`Tailoring failed (${res.status})`);
   return res.blob();
-}
-
-/** Eagerly tailor top N jobs in background right after search results appear.
- *  Fire-and-forget — caller should NOT await this. */
-export function pretailorJobs(resumeId: number, jobs: JobMatch[]): void {
-  fetch(`${BASE}/api/v1/resumes/${resumeId}/pretailor/`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      jobs: jobs.map((j) => ({
-        title: j.title,
-        company: j.company,
-        jd_text: j.jd_text,
-        source_url: j.source_url,
-      })),
-    }),
-  }).catch(() => {});  // silent — pretailor is opportunistic, failure is fine
 }

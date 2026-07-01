@@ -49,14 +49,7 @@ class TailoredResume(models.Model):
 
     Job context (title, company, JD) is stored inline because the job itself is
     ephemeral — there is no JobMatch row to reference after the session ends.
-
-    source_url is the stable job identity within a session — used to look up a
-    pre-tailored result so the download handler can skip the LLM call entirely.
-    status=pending means the LLM call is in flight; done means it's ready to serve.
     """
-
-    STATUS_PENDING = "pending"
-    STATUS_DONE = "done"
 
     resume = models.ForeignKey(
         Resume, on_delete=models.CASCADE, related_name="tailored"
@@ -64,9 +57,7 @@ class TailoredResume(models.Model):
     job_title = models.CharField(max_length=255, blank=True)
     job_company = models.CharField(max_length=255, blank=True)
     job_jd_text = models.TextField(blank=True)
-    source_url = models.CharField(max_length=500, blank=True)
-    status = models.CharField(max_length=16, default=STATUS_PENDING)
-    content = models.TextField(blank=True)  # JSON-serialised structured resume; empty while pending
+    content = models.TextField()  # JSON-serialised structured resume
     created_date = models.DateTimeField(auto_now_add=True)
 
     def __str__(self) -> str:

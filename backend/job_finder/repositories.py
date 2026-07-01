@@ -28,44 +28,12 @@ class TailoredResumeRepository:
         job_title: str = "",
         job_company: str = "",
         job_jd_text: str = "",
-        source_url: str = "",
-        status: str = TailoredResume.STATUS_PENDING,
-        content: str = "",
+        content: str,
     ) -> TailoredResume:
         return TailoredResume.objects.create(
             resume=resume,
             job_title=job_title,
             job_company=job_company,
             job_jd_text=job_jd_text,
-            source_url=source_url,
-            status=status,
             content=content,
-        )
-
-    def get_done(self, *, resume_id: int, source_url: str) -> TailoredResume | None:
-        return TailoredResume.objects.filter(
-            resume_id=resume_id,
-            source_url=source_url,
-            status=TailoredResume.STATUS_DONE,
-        ).first()
-
-    def get_or_create_pending(
-        self, *, resume: Resume, job_title: str, job_company: str, job_jd_text: str, source_url: str
-    ) -> tuple[TailoredResume, bool]:
-        return TailoredResume.objects.get_or_create(
-            resume=resume,
-            source_url=source_url,
-            defaults={
-                "job_title": job_title,
-                "job_company": job_company,
-                "job_jd_text": job_jd_text,
-                "status": TailoredResume.STATUS_PENDING,
-                "content": "",
-            },
-        )
-
-    def mark_done(self, *, pk: int, content: str) -> None:
-        TailoredResume.objects.filter(pk=pk).update(
-            content=content,
-            status=TailoredResume.STATUS_DONE,
         )

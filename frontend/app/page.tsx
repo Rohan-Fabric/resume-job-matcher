@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { flushSync } from "react-dom";
-import { uploadResume, tailorForJob, loadMoreJobs, pretailorJobs } from "./lib/api";
+import { uploadResume, tailorForJob, loadMoreJobs } from "./lib/api";
 import type { JobFilters, JobMatch, Resume } from "./lib/types";
 import { Search, MapPin } from "lucide-react";
 import { UploadCard } from "./components/UploadCard";
@@ -115,7 +115,6 @@ export default function Home() {
         const useRole = data?.profile?.titles?.[0] || undefined;
         const jobsData = await loadMoreJobs(data.id, 1, { workType: "hybrid", role: useRole });
         setResume(jobsData);
-        pretailorJobs(data.id, jobsData.matches.slice(0, 2));
       } catch (err) {
         console.error("initial job search failed", err);
       } finally {
@@ -205,7 +204,6 @@ export default function Home() {
         role: useRole || undefined,
       });
       animateTo(data);
-      pretailorJobs(resume.id, data.matches.slice(0, 2));
       setPage(1);
       setApplied({ loc: useLoc, type: workType });
       setAppliedRole(useRole);

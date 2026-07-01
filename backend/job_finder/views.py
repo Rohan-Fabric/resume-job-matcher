@@ -16,12 +16,11 @@ MIN_RESUME_CHARS = 200  # less than this = empty/scanned/not a real resume
 
 class ResumeViewSet(ViewSet):
     """
-    POST /api/v1/resumes/                   → upload + profile extraction
-    GET  /api/v1/resumes/{id}/              → resume + profile
-    POST /api/v1/resumes/{id}/more/         → fetch + score jobs, return enriched list
-    POST /api/v1/resumes/{id}/explain/      → LLM reasoning for one job (job data in body)
-    POST /api/v1/resumes/{id}/tailor/       → tailor resume for one job, return PDF
-    POST /api/v1/resumes/{id}/pretailor/    → eagerly tailor top N jobs in background
+    POST /api/v1/resumes/                → upload + profile extraction
+    GET  /api/v1/resumes/{id}/           → resume + profile
+    POST /api/v1/resumes/{id}/more/      → fetch + score jobs, return enriched list
+    POST /api/v1/resumes/{id}/explain/   → LLM reasoning for one job (job data in body)
+    POST /api/v1/resumes/{id}/tailor/    → tailor resume for one job, return PDF
     """
 
     def create(self, request):
@@ -92,14 +91,12 @@ class ResumeViewSet(ViewSet):
     def tailor(self, request, pk=None):
         """Tailor the resume for a specific job, return as a PDF download.
 
-        Body: { "title": "...", "company": "...", "jd_text": "...", "source_url": "..." }
-        If source_url is provided and a pretailor result exists, skips the LLM call."""
+        Body: { "title": "...", "company": "...", "jd_text": "..." }"""
         result = ResumeMatchService().tailor_for_job(
             resume_id=int(pk),
             title=request.data.get("title", ""),
             company=request.data.get("company", ""),
             jd_text=request.data.get("jd_text", ""),
-            source_url=request.data.get("source_url", ""),
         )
         if result is None:
             return Response(status=status.HTTP_404_NOT_FOUND)
@@ -108,22 +105,3 @@ class ResumeViewSet(ViewSet):
         response = HttpResponse(pdf, content_type="application/pdf")
         response["Content-Disposition"] = f'attachment; filename="{filename}"'
         return response
-
-    @action(detail=True, methods=["post"])
-    def pretailor(self, request, pk=None):
-        """Eagerly tailor top N jobs right after search results appear.
-
-        Body: { "jobs": [{ "title", "company", "jd_text", "source_url" }, ...] }
-        Returns 204 immediately — LLM calls run in a daemon thread so the HTTP
-        worker is never blocked. Daemon=True means the thread won't prevent process
-        shutdown if Render recycles the container mid-flight (acceptable data loss)."""
-        jobs = request.data.get("jobs") or []
-        if jobs:
-            import threading
-            t = threading.Thread(
-                target=ResumeMatchService().pretailor_top_jobs,
-                kwargs={"resume_id": int(pk), "jobs": jobs},
-                daemon=True,
-            )
-            t.start()
-        return Response(status=status.HTTP_204_NO_CONTENT)

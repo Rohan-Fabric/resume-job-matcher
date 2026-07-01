@@ -134,74 +134,22 @@ class ResumeMatchService:
         return self.llm.explain_match(resume.raw_text, jd_text)
 
     def tailor_for_job(
-        self, *, resume_id: int, title: str, company: str, jd_text: str, source_url: str = ""
+        self, *, resume_id: int, title: str, company: str, jd_text: str
     ) -> tuple | None:
-        """Tailor the resume for a specific job. Checks DB first — if pretailor already
-        finished for this job, skips the LLM call entirely and serves the cached result."""
+        """Tailor the resume for a specific job. Persists the output with inline job
+        context so the result survives after the ephemeral job listing expires.
+        Returns (structured_resume_dict, filename) for PDF rendering."""
         resume = self.resume_repo.get(resume_id)
         if resume is None:
             return None
-
-        if source_url:
-            existing = self.tailored_repo.get_done(resume_id=resume_id, source_url=source_url)
-            if existing:
-                data = json.loads(existing.content)
-                name = _slug(data.get("name", ""), "candidate")
-                company_slug = _slug(company, "job")
-                return data, f"{name}-{company_slug}.pdf"
-
         data = self.llm.tailor_resume(resume.raw_text, jd_text)
-        content = json.dumps(data)
-
-        if source_url:
-            obj, created = self.tailored_repo.get_or_create_pending(
-                resume=resume,
-                job_title=title,
-                job_company=company,
-                job_jd_text=jd_text,
-                source_url=source_url,
-            )
-            self.tailored_repo.mark_done(pk=obj.pk, content=content)
-        else:
-            self.tailored_repo.create(
-                resume=resume,
-                job_title=title,
-                job_company=company,
-                job_jd_text=jd_text,
-                content=content,
-                status="done",
-            )
-
+        self.tailored_repo.create(
+            resume=resume,
+            job_title=title,
+            job_company=company,
+            job_jd_text=jd_text,
+            content=json.dumps(data),
+        )
         name = _slug(data.get("name", ""), "candidate")
         company_slug = _slug(company, "job")
         return data, f"{name}-{company_slug}.pdf"
-
-    def pretailor_top_jobs(self, *, resume_id: int, jobs: list[dict]) -> None:
-        """Eagerly tailor the top N jobs in parallel right after search results appear.
-        Creates a pending row immediately (so tailor_for_job won't double-fire), then
-        fires LLM calls concurrently and marks each done when finished."""
-        resume = self.resume_repo.get(resume_id)
-        if resume is None:
-            return
-
-        def _tailor_one(job: dict) -> None:
-            source_url = job.get("source_url", "")
-            if not source_url:
-                return
-            obj, created = self.tailored_repo.get_or_create_pending(
-                resume=resume,
-                job_title=job.get("title", ""),
-                job_company=job.get("company", ""),
-                job_jd_text=job.get("jd_text", ""),
-                source_url=source_url,
-            )
-            if not created:
-                return  # already tailored or in progress from another request
-            try:
-                data = self.llm.tailor_resume(resume.raw_text, job.get("jd_text", ""))
-                self.tailored_repo.mark_done(pk=obj.pk, content=json.dumps(data))
-            except Exception:
-                obj.delete()  # remove pending row so next attempt can retry
-
-        with ThreadPoolExecutor(max_workers=len(jobs)) as pool:
-            list(pool.map(_tailor_one, jobs))
